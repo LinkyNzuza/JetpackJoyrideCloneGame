@@ -1,19 +1,21 @@
 // Feature: player-core-gameplay
-// Contract only: no UnityEngine types appear here.
+// Contract implemented by the coin prefab script owned by the collectibles slice.
 
 namespace Game.Player
 {
     /// <summary>
-    /// Implemented by the coin prefab script owned by the collectibles slice.
-    /// Absence of this component on a coin is a valid state: routing then falls
-    /// back to the default value (Requirement 6.7). The member name is recorded
-    /// in the Agreements_Document.
+    /// Implemented by a component on a coin prefab to declare that coin's score value.
+    /// <para>
+    /// A coin that carries no component implementing this interface is a valid case:
+    /// <see cref="PlayerCollision"/> falls back to its serialized default value. Values
+    /// outside the accepted range are clamped and reported once per instance.
+    /// </para>
     /// </summary>
     public interface ICoinValue
     {
         /// <summary>
-        /// The score value this coin declares. Routing normalises the value into
-        /// the accepted range before it reaches subscribers.
+        /// This coin's score value. Accepted range is 1 to 1000 inclusive; values outside
+        /// that range are clamped by the collision handler.
         /// </summary>
         int CoinValue { get; }
     }
