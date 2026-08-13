@@ -1,4 +1,4 @@
-// TEMPORARY PLAYTEST SCAFFOLDING — delete this folder before submission.
+// Playtest scaffolding. Remove this folder before final submission.
 // Debug readout only. This is NOT the game HUD; that belongs to the UI slice.
 // It subscribes to the player's four public events, which also proves the
 // event surface works for the GameManager that will consume it.

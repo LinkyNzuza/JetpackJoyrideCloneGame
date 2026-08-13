@@ -1,4 +1,4 @@
-// TEMPORARY PLAYTEST SCAFFOLDING — delete this folder before submission.
+// Playtest scaffolding. Remove this folder before final submission.
 // Stands in for the collectibles slice so the player's coin path can be exercised.
 
 using UnityEngine;

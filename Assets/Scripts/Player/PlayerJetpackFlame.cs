@@ -1,4 +1,3 @@
-// Feature: player-core-gameplay
 // Jetpack exhaust presentation. Reads PlayerController.IsThrusting only — never input,
 // never physics — the same discipline as PlayerAnimation.
 

@@ -1,4 +1,3 @@
-// Feature: player-core-gameplay
 // PlayerAnimation ONLY reads PlayerController.IsAlive and IsThrusting — never raw input or physics.
 
 using System;

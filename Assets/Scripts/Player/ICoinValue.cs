@@ -1,4 +1,3 @@
-// Feature: player-core-gameplay
 // Contract implemented by the coin prefab script owned by the collectibles slice.
 
 namespace Game.Player

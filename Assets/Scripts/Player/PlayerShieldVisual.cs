@@ -1,4 +1,3 @@
-// Feature: player-core-gameplay
 // Shield bubble presentation. Reads PlayerController.IsShielded only — never input,
 // never physics, never collision. Purely a mirror of published player state.
 

@@ -1,4 +1,3 @@
-// Feature: player-core-gameplay
 // PlayerCollision routes physics contacts to the appropriate player response.
 // ReleaseCollectible is the ONLY method that calls Destroy — change it when pooling is decided.
 

@@ -1,4 +1,3 @@
-// Feature: player-core-gameplay
 // PlayerDeath orchestrates the one-shot death sequence; PlayerController owns all state mutation.
 // NO UI code, NO SceneManager, NO Time.timeScale, NO GameManager reference — by design.
 

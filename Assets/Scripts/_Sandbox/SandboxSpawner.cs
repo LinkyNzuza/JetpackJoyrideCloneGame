@@ -1,4 +1,4 @@
-// TEMPORARY PLAYTEST SCAFFOLDING — delete this folder before submission.
+// Playtest scaffolding. Remove this folder before final submission.
 // Stands in for the world/obstacles slice (scrolling + spawning) so the player
 // slice can be tuned by feel. Sprites are generated in code, so this depends on
 // no art assets and cannot break when real prefabs arrive.

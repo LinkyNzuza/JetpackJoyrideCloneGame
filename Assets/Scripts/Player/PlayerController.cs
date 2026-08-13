@@ -1,4 +1,3 @@
-// Feature: player-core-gameplay
 // Unity 6 (6000.0.53f1) — uses Rigidbody2D.linearVelocity exclusively (the pre-Unity-6 API is obsolete).
 
 using System;
