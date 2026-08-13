@@ -119,6 +119,63 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &70479212
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 70479214}
+  - component: {fileID: 70479213}
+  m_Layer: 0
+  m_Name: LaserSpawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &70479213
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 70479212}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ec296b131293e94daefbb1406281b2f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LaserSpawner
+  laserPrefab: {fileID: 1631662641575506255, guid: 509460413dfd47742898874a0352286b, type: 3}
+  playerTransform: {fileID: 608560573}
+  spawnAheadDistance: 12
+  minY: -2.9
+  maxY: 2.9
+  totalLanes: 6
+  timeBetweenWaves: 3
+  minTimeBetweenWaves: 0.8
+  waveIntervalDecay: 1.2
+  laserTelegraphTime: 2
+  laserActiveTime: 6
+  minTelegraphTime: 0.35
+  telegraphDecay: 0.95
+--- !u!4 &70479214
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 70479212}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.46, y: 2.53, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &588846885
 GameObject:
   m_ObjectHideFlags: 0
@@ -283,13 +340,14 @@ GameObject:
   - component: {fileID: 608560572}
   - component: {fileID: 608560571}
   - component: {fileID: 608560570}
+  - component: {fileID: 608560574}
   m_Layer: 0
   m_Name: Circle
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!50 &608560570
 Rigidbody2D:
   serializedVersion: 5
@@ -399,7 +457,74 @@ Transform:
   m_GameObject: {fileID: 608560569}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1, y: -2.4, z: 0}
+  m_LocalPosition: {x: -3.74, y: -2.4, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &608560574
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 608560569}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 10eb22761b4c6f4468b751fe509d6a12, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerHealth
+  maxLives: 3
+  invincibilityDuration: 1
+--- !u!1 &938176745
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 938176747}
+  - component: {fileID: 938176746}
+  m_Layer: 0
+  m_Name: MissleSpawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &938176746
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 938176745}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4857d2a65b868454386cd5dae71cc5f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MissileSpawner
+  missilePrefab: {fileID: 6020248160637429063, guid: cb79bc264a3d2c547a99b6e7e089ee87, type: 3}
+  playerTransform: {fileID: 608560573}
+  spawnAheadDistance: 12
+  minY: -2.7
+  maxY: 2.7
+  gapBetweenMissilesInBurst: 0.3
+  missileSpeedStart: 5
+  missileSpeedMax: 10
+  speedIncreasePerCycle: 0.5
+--- !u!4 &938176747
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 938176745}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 14.67031, y: 5.01286, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -737,3 +862,5 @@ SceneRoots:
   - {fileID: 1015000542}
   - {fileID: 608560573}
   - {fileID: 588846889}
+  - {fileID: 70479214}
+  - {fileID: 938176747}

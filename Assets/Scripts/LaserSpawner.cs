@@ -6,6 +6,7 @@ public class LaserSpawner : MonoBehaviour
 {
     [Header("Laser Setup")]
     [SerializeField] private GameObject laserPrefab;
+    
     [SerializeField] private Transform playerTransform; // spawn point tracks this so waves keep appearing ahead as the player advances
     [SerializeField] private float spawnAheadDistance = 12f; // how far along x, ahead of the player, lasers spawn
 
@@ -18,7 +19,12 @@ public class LaserSpawner : MonoBehaviour
     [SerializeField] private float timeBetweenWaves = 2.5f;
     [SerializeField] private float minTimeBetweenWaves = 0.6f;
     [SerializeField] private float waveIntervalDecay = 0.92f;     // interval shrinks by this factor each wave
-    [SerializeField] private int maxActiveLasers = 6;              // caps the exponential growth so late waves stay dodgeable
+    // Explicit spawn-count pattern, cycled through one value per wave.
+    private static readonly int[] laserCountPattern =
+    {
+        1,3,2,1,2,2,3,3,3,1,1,2,1,1,1,1,3,2,2,3,2,1,2,1,2,1,3,3,3,3,2,3,2,1,1,1,3,2,3,1,2,3,1,2,3
+    };
+    private int patternIndex = 0;
     [SerializeField] private float laserTelegraphTime = 0.8f;      // warning time before it becomes dangerous
     [SerializeField] private float laserActiveTime = 1.0f;         // how long it stays dangerous
     [SerializeField] private float minTelegraphTime = 0.35f;
@@ -51,9 +57,10 @@ public class LaserSpawner : MonoBehaviour
 
     private void SpawnWave()
     {
-        // Binary exponentiation growth: wave 0 -> 1 active laser, wave 1 -> 2, wave 2 -> 4, wave 3 -> 8...
-        // Capped by maxActiveLasers/totalLanes so it never demands dodging every lane at once.
-        int activeCount = Mathf.Min((int)Mathf.Pow(2, waveIndex), maxActiveLasers, totalLanes);
+        // Pull this wave's laser count from the fixed pattern, wrapping back to the
+        // start once we reach the end. Still capped by totalLanes as a safety net.
+        int activeCount = Mathf.Min(laserCountPattern[patternIndex], totalLanes);
+        patternIndex = (patternIndex + 1) % laserCountPattern.Length;
 
         List<int> lanes = new List<int>(totalLanes);
         for (int i = 0; i < totalLanes; i++) lanes.Add(i);
@@ -88,7 +95,8 @@ public class LaserSpawner : MonoBehaviour
         GameObject laser = Instantiate(
             laserPrefab,
             new Vector3(spawnX, y, 0f),
-            Quaternion.identity);
+            Quaternion.identity
+        );
 
         LaserBehaviour behaviour = laser.GetComponent<LaserBehaviour>();
         if (behaviour != null)
