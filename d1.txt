@@ -1,0 +1,15 @@
+art png = 156
+art meta = 166
+--- has Unity rebuilt scripts? ---
+  Assembly-CSharp.dll  modified 08/12/2026 14:40:07
+  PlayerJetpackFlame.cs modified 08/12/2026 14:33:03
+  Player.prefab modified 08/12/2026 14:33:48
+--- fire meta guids (must be distinct) ---
+  fire00.png.meta     guid: f1a3e000000000000000000000000000   spriteID: 5e97eb03825dee720800000000000000
+  fire01.png.meta     guid: f1a3e000000000000000000000000001   spriteID: 5e97eb03825dee720800000000000000
+  fire02.png.meta     guid: f1a3e000000000000000000000000002   spriteID: 5e97eb03825dee720800000000000000
+  fire03.png.meta     guid: f1a3e000000000000000000000000003   spriteID: 5e97eb03825dee720800000000000000
+  fire04.png.meta     guid: f1a3e000000000000000000000000004   spriteID: 5e97eb03825dee720800000000000000
+  fire05.png.meta     guid: f1a3e000000000000000000000000005   spriteID: 5e97eb03825dee720800000000000000
+  fire06.png.meta     guid: f1a3e000000000000000000000000006   spriteID: 5e97eb03825dee720800000000000000
+  fire07.png.meta     guid: f1a3e000000000000000000000000007   spriteID: 5e97eb03825dee720800000000000000

@@ -16,8 +16,14 @@ namespace Game.Player
     /// </summary>
     public sealed class PlayerJetpackFlame : MonoBehaviour
     {
+        /// <summary>
+        /// Folder under any Resources directory holding the flame frames, loaded in
+        /// alphabetical order when <see cref="_frames"/> is left empty.
+        /// </summary>
+        private const string FramesResourcePath = "PlayerFX/Jetpack";
+
         [Header("Flame frames")]
-        [Tooltip("Frames cycled while thrusting, in order. Assign the fire00..fire07 sprites.")]
+        [Tooltip("Optional. Leave empty to auto-load every sprite in Resources/PlayerFX/Jetpack.")]
         [SerializeField] private Sprite[] _frames;
 
         // Tuning: raise for a more frantic flame, lower for a lazier plume.
@@ -53,6 +59,18 @@ namespace Game.Player
                 return;
             }
 
+            // Load by name rather than relying on serialized sprite references. This keeps the
+            // effect working regardless of how the textures were imported or re-imported.
+            if (_frames == null || _frames.Length == 0)
+            {
+                Sprite[] loaded = Resources.LoadAll<Sprite>(FramesResourcePath);
+                if (loaded != null && loaded.Length > 0)
+                {
+                    System.Array.Sort(loaded, (a, b) => string.CompareOrdinal(a.name, b.name));
+                    _frames = loaded;
+                }
+            }
+
             transform.localPosition = _localOffset;
             transform.localScale = new Vector3(_scale, _scale, 1f);
             _renderer.sortingOrder = _sortingOrder;
@@ -68,7 +86,9 @@ namespace Game.Player
                 if (!_warned)
                 {
                     _warned = true;
-                    Debug.LogError("[PlayerJetpackFlame] No flame frames assigned; flame disabled.", this);
+                    Debug.LogError(
+                        "[PlayerJetpackFlame] No flame frames. Expected sprites in " +
+                        $"Resources/{FramesResourcePath} or assigned in the Inspector.", this);
                 }
                 _renderer.enabled = false;
                 return;
