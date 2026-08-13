@@ -6,38 +6,35 @@ public class LaserSpawner : MonoBehaviour
 {
     [Header("Laser Setup")]
     [SerializeField] private GameObject laserPrefab;
-    
+    [SerializeField] private Transform spawnParent; // optional, keeps hierarchy tidy
     [SerializeField] private Transform playerTransform; // spawn point tracks this so waves keep appearing ahead as the player advances
     [SerializeField] private float spawnAheadDistance = 12f; // how far along x, ahead of the player, lasers spawn
+    [SerializeField] private float minSpawnGapX = 10f; // waves are never placed closer than this to the previous wave along x, even if the player is slow or waves fire in quick succession
+
+    private float lastWaveSpawnX = float.NegativeInfinity; // x position the previous wave spawned at, used to enforce minSpawnGapX
 
     [Header("Y-Axis Range")]
     [SerializeField] private float minY = -2.7f;
     [SerializeField] private float maxY = 2.7f;
     [SerializeField] private int totalLanes = 8; // how many horizontal slots exist across the range
 
-    [Header("Difficulty Scaling")]
-    [SerializeField] private float timeBetweenWaves = 2.5f;
-    [SerializeField] private float minTimeBetweenWaves = 0.6f;
-    [SerializeField] private float waveIntervalDecay = 0.92f;     // interval shrinks by this factor each wave
+    [Header("Wave Timing")]
+    [SerializeField] private float timeBetweenWaves = 2.5f; // fixed interval between waves
+
+    [Header("Lane Spacing")]
+    [SerializeField] private int minLaneGap = 1; // minimum empty lanes required between two active lanes in the same wave, so there's always room to dodge through
+
     // Explicit spawn-count pattern, cycled through one value per wave.
     private static readonly int[] laserCountPattern =
     {
         1,3,2,1,2,2,3,3,3,1,1,2,1,1,1,1,3,2,2,3,2,1,2,1,2,1,3,3,3,3,2,3,2,1,1,1,3,2,3,1,2,3,1,2,3
     };
     private int patternIndex = 0;
-    [SerializeField] private float laserTelegraphTime = 0.8f;      // warning time before it becomes dangerous
-    [SerializeField] private float laserActiveTime = 1.0f;         // how long it stays dangerous
-    [SerializeField] private float minTelegraphTime = 0.35f;
-    [SerializeField] private float telegraphDecay = 0.95f;         // telegraph also shrinks over time -> less reaction time
-
-    private int waveIndex = 0;
-    private float currentInterval;
-    private float currentTelegraph;
+    [SerializeField] private float laserTelegraphTime = 0.8f; // fixed warning time before a laser becomes dangerous
+    [SerializeField] private float laserActiveTime = 1.0f;    // how long it stays dangerous
 
     private void Start()
     {
-        currentInterval = timeBetweenWaves;
-        currentTelegraph = laserTelegraphTime;
         StartCoroutine(SpawnLoop());
     }
 
@@ -45,13 +42,8 @@ public class LaserSpawner : MonoBehaviour
     {
         while (true)
         {
-            yield return new WaitForSeconds(currentInterval);
+            yield return new WaitForSeconds(timeBetweenWaves);
             SpawnWave();
-
-            waveIndex++;
-            // Ramp difficulty: waves come faster and give less warning as waveIndex grows.
-            currentInterval = Mathf.Max(minTimeBetweenWaves, currentInterval * waveIntervalDecay);
-            currentTelegraph = Mathf.Max(minTelegraphTime, currentTelegraph * telegraphDecay);
         }
     }
 
@@ -62,46 +54,93 @@ public class LaserSpawner : MonoBehaviour
         int activeCount = Mathf.Min(laserCountPattern[patternIndex], totalLanes);
         patternIndex = (patternIndex + 1) % laserCountPattern.Length;
 
-        List<int> lanes = new List<int>(totalLanes);
-        for (int i = 0; i < totalLanes; i++) lanes.Add(i);
+        List<int> activeLanes = SelectLanesWithGap(activeCount, minLaneGap);
 
-        // Shuffle so which lanes are "active" this wave is random - the rest stay open as dodge gaps.
-        for (int i = 0; i < lanes.Count; i++)
-        {
-            int swapIndex = Random.Range(i, lanes.Count);
-            (lanes[i], lanes[swapIndex]) = (lanes[swapIndex], lanes[i]);
-        }
+        // Wave x is normally gap-based off the previous wave, so spacing stays
+        // exactly minSpawnGapX. But that alone doesn't account for player speed -
+        // if the player closes the distance faster than waves are spaced out,
+        // this also floors spawnX at spawnAheadDistance in front of the player,
+        // so every wave (not just the first) stays ahead of them.
+        float gapBasedX = lastWaveSpawnX == float.NegativeInfinity
+            ? float.NegativeInfinity
+            : lastWaveSpawnX + minSpawnGapX;
+        float playerAheadX = playerTransform != null
+            ? playerTransform.position.x + spawnAheadDistance
+            : transform.position.x;
+        float spawnX = Mathf.Max(gapBasedX, playerAheadX);
+        lastWaveSpawnX = spawnX;
 
         float laneHeight = (maxY - minY) / totalLanes;
 
-        for (int i = 0; i < activeCount; i++)
+        foreach (int lane in activeLanes)
         {
-            int lane = lanes[i];
             float y = minY + laneHeight * lane + laneHeight * 0.5f; // center of the lane, always within [minY, maxY]
-            SpawnLaser(y);
+            LaneOccupancy.Occupy(lane);
+            SpawnLaser(spawnX, y, lane);
         }
     }
 
-    private void SpawnLaser(float y)
+    // Picks 'count' lanes out of totalLanes such that no two picks are within
+    // minGap of each other, guaranteeing an open corridor to dodge through.
+    // Falls back to filling remaining slots without the gap rule if the
+    // constraint can't be satisfied (e.g. count is too high for the gap size),
+    // so we never silently spawn fewer lasers than the pattern calls for.
+    private List<int> SelectLanesWithGap(int count, int minGap)
     {
-        // Spawn x tracks the player + a fixed lead distance, so as the player moves
-        // along the x axis the spawn point continuously moves with them, always
-        // placing new waves the same distance ahead. Flip the sign on spawnAheadDistance
-        // if your player runs toward -x instead of +x.
-        float spawnX = playerTransform != null
-            ? playerTransform.position.x + spawnAheadDistance
-            : transform.position.x;
+        List<int> laneOrder = new List<int>(totalLanes);
+        for (int i = 0; i < totalLanes; i++) laneOrder.Add(i);
 
+        for (int i = 0; i < laneOrder.Count; i++)
+        {
+            int swapIndex = Random.Range(i, laneOrder.Count);
+            (laneOrder[i], laneOrder[swapIndex]) = (laneOrder[swapIndex], laneOrder[i]);
+        }
+
+        List<int> selected = new List<int>(count);
+        foreach (int lane in laneOrder)
+        {
+            bool tooClose = false;
+            foreach (int chosen in selected)
+            {
+                if (Mathf.Abs(chosen - lane) <= minGap)
+                {
+                    tooClose = true;
+                    break;
+                }
+            }
+
+            if (!tooClose)
+            {
+                selected.Add(lane);
+                if (selected.Count == count) break;
+            }
+        }
+
+        if (selected.Count < count)
+        {
+            foreach (int lane in laneOrder)
+            {
+                if (selected.Count == count) break;
+                if (!selected.Contains(lane)) selected.Add(lane);
+            }
+        }
+
+        return selected;
+    }
+
+    private void SpawnLaser(float spawnX, float y, int lane)
+    {
         GameObject laser = Instantiate(
             laserPrefab,
             new Vector3(spawnX, y, 0f),
-            Quaternion.identity
+            Quaternion.identity,
+            spawnParent
         );
 
         LaserBehaviour behaviour = laser.GetComponent<LaserBehaviour>();
         if (behaviour != null)
         {
-            behaviour.Activate(currentTelegraph, laserActiveTime);
+            behaviour.Activate(laserTelegraphTime, laserActiveTime, lane);
         }
     }
 }

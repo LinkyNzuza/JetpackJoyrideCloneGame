@@ -18,8 +18,11 @@ public class LaserBehaviour : MonoBehaviour
         hitbox = GetComponent<Collider2D>();
     }
 
-    public void Activate(float telegraphTime, float activeTime)
+    private int lane;
+
+    public void Activate(float telegraphTime, float activeTime, int laneIndex)
     {
+        lane = laneIndex;
         StartCoroutine(Sequence(telegraphTime, activeTime));
     }
 
@@ -50,5 +53,11 @@ public class LaserBehaviour : MonoBehaviour
         yield return new WaitForSeconds(activeTime);
 
         Destroy(gameObject);
+    }
+
+    // Runs no matter how/why this gets destroyed, so the lane always frees up.
+    private void OnDestroy()
+    {
+        LaneOccupancy.Free(lane);
     }
 }
