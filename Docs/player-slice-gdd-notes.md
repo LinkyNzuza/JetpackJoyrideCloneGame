@@ -22,10 +22,21 @@
 | **Diagrams and technical breakdowns** | 4.1, 4.2, 5.1 |
 | **Iterative design process and why things changed** | 6 |
 | Testing, evaluation, decision-making | 7 |
-| **Personal reflection** | 8 |
-| Project plan: systems and dependencies | 9 |
+| Production process and role fulfilment | 8 |
+| **Personal reflection** | 9 |
+| Project plan: systems and dependencies | 10 |
 
 Sections in bold are the individual submission's weighted criteria.
+
+**Critical framing.** The course requires design and process to be articulated into the
+field rather than described in isolation. Three set works are used as working tools
+rather than citations of convenience, and each is applied where it does real work:
+
+| Work | Where it is used | What it does |
+|---|---|---|
+| Anthropy & Clark, *A Game Design Vocabulary* | 1.4, 2.2, 3.1 | Gives the vocabulary for the verb-economy claim at the centre of the hypothesis |
+| Bogost, *Unit Operations* | 1.4, 5.1 | Frames both the endless runner's content model and the team's system architecture |
+| Maxwell-Gardner, *The Game Production Handbook* | 1.4, 8 | Frames the production process, build cadence, and role division honestly |
 
 ---
 
@@ -74,6 +85,67 @@ Property 1 is why my slice locks the player's horizontal position rather than mo
 them: the *world* moves, and the player's entire expressive range is vertical. Property 3
 is why the death sequence in my slice must fire exactly once and be unambiguous.
 
+### 1.4 Critical framing
+
+#### Verbs, not controls — Anthropy & Clark
+
+Anthropy and Clark argue that a game's expressive vocabulary is its **verbs**: what the
+player can do, and what those doings mean in context. Crucially, a verb is not the button
+that triggers it. A verb is constituted by what it acts upon and what resists it.
+
+This distinction is what makes our interrogation precise. Described as a control,
+*Jetpack Joyride* has one button, and there is nothing to analyse. Described as a verb,
+the player's action is not "press" but **"apply upward force against gravity"** — and
+that verb has an object (the character's momentum) and a resistance (gravity). The
+resistance is *part of the verb*, not a separate system it happens to interact with.
+
+This reframing is load-bearing for the whole document. It relocates the question from
+input handling, where there is nothing to find, to the physical relationship the input
+addresses, where everything is. Section 2 formalises that as the hypothesis.
+
+Anthropy and Clark also observe that games say something through their verb economy.
+*Jetpack Joyride*'s vocabulary is worth reading on those terms: the character is
+**always falling**, and thrust is only ever a temporary interruption of the default
+state. Effort is momentary; gravity is permanent. For a game about a man who steals a
+jetpack and never arrives anywhere, that is a coherent statement, and it is expressed
+entirely through mechanics rather than narration.
+
+#### Units, not systems — Bogost
+
+Bogost distinguishes **unit operations** — discrete, encapsulated, recombinant elements
+whose meaning emerges from configuration — from **system operations**, which are
+totalising and hierarchical. He draws the analogy to object-oriented software explicitly,
+which makes the framework unusually applicable here, at two levels.
+
+**At the level of content.** An endless runner has no authored totality. There is no
+level to read, only a stream of recombinant units — hazard, coin, power-up — whose
+*configurations* generate challenge. Difficulty is not designed; it is a property of how
+units are permitted to combine. This is why genre property 2 shifts the design burden
+onto systems: the designer authors the combination rules, not the experience.
+
+**At the level of architecture.** Our three slices are unit operations in Bogost's sense.
+The player publishes state and events outward and reads nothing back. There is no central
+orchestrator computing the game's behaviour top-down. Gameplay is what emerges when the
+three units are configured together.
+
+The alternative was available and is the more common student solution: a `GameManager`
+that owns the player, polls its state, and drives the other systems. That is a system
+operation — totalising, hierarchical, and, in a three-person team, a single file three
+people must edit simultaneously. Section 5.1 returns to this, because choosing units over
+systems had consequences for both the code and the collaboration.
+
+#### Production as design constraint — Maxwell-Gardner
+
+Maxwell-Gardner treats production not as administration downstream of design but as a
+constraint that shapes what can be designed. Schedule, role division, integration
+cadence, and risk are design inputs.
+
+This matters because the brief's demand for a build every two days is not a bureaucratic
+requirement — it is a design instrument. Continuous integration means the team feels the
+whole game repeatedly rather than discovering it once at the end. Section 8 assesses how
+well we actually met that, and section 6 records two occasions where a production
+constraint directly overrode a technical preference.
+
 ---
 
 ## 2. Interrogation
@@ -114,6 +186,13 @@ This hypothesis is falsifiable, which is what makes it useful. If the feel were 
 in the input handling, then tuning those four numbers would change difficulty but not
 character. If the hypothesis holds, tuning them should change the game's *personality*:
 floaty versus heavy, forgiving versus twitchy.
+
+**In Anthropy and Clark's terms**, the hypothesis is a claim about where a verb's meaning
+resides. If a verb is constituted by its object and its resistance, then modifying the
+resistance modifies the verb — even when the input that triggers it is untouched. The
+prediction is therefore quite specific: *we should be able to change the game's verb
+without changing a single line of input code.* Every tuning pass is a test of that claim,
+and the code that reads the button is the control variable.
 
 ### 2.3 Group design goals
 
@@ -173,6 +252,18 @@ The complete verb set, which is deliberately tiny:
 Only two verbs are active. Collection and absorption are *consequences* of positioning
 rather than actions, which is important: the player never presses a "collect" button, so
 every pickup is really a navigation decision made earlier.
+
+Following Anthropy and Clark, the table above is deliberately written as verbs rather than
+controls, and the two active verbs are really one verb with two polarities — the player is
+always modulating a single quantity. This is the narrowest possible vocabulary that still
+produces a game, which is precisely why it is worth interrogating. A game with two verbs
+that feels expressive has to be manufacturing that expressiveness structurally.
+
+Note also what the vocabulary *excludes*. There is no verb for attacking, evading,
+stopping, or waiting. The player cannot decline to play — releasing the button is still an
+action with consequences, because the default state is falling. There is no neutral input.
+That absence is a design choice with real weight: it means the player is never idle, and
+attention can never lapse.
 
 ### 3.2 The challenge taxonomy
 
@@ -371,6 +462,35 @@ Subscribers are each invoked inside their own try/catch, so a fault in another s
 cannot break the player. This was a decision about *team* robustness as much as code:
 it means a bug in the UI slice cannot make my slice look broken during a shared build.
 
+### 5.1a Units over systems — and what it cost
+
+This structure is a deliberate choice of unit operations over a system operation, in
+Bogost's sense. The player is encapsulated: it exposes an interface and computes its own
+behaviour. No component above it computes on its behalf.
+
+The conventional alternative was a `GameManager` holding references to all three systems,
+polling the player each frame and pushing results to the UI. That is a system operation —
+totalising, hierarchical, one authority. It is also easier to write, and it is what the
+original plan for this project implied by naming a GameManager as the third slice's
+central component.
+
+**What choosing units bought us.** Three people could work simultaneously without a
+shared authority file. My slice was testable before either other slice existed, because
+its correctness is defined by its own interface rather than by its position in a
+hierarchy. Unarine could build against a specification rather than against my
+implementation.
+
+**What it cost.** Meaning that lives in configuration rather than in a central authority
+is harder to *locate* when it goes wrong. There is no single place to read the game's
+behaviour — you have to reason about the interaction of three units. Two of our
+unresolved items are symptoms of exactly this: the magnet effect has no natural owner
+because it spans two units, and the scene naming question has no authority to settle it.
+A system operation would have made both trivially decidable, at the cost of the
+parallelism that let us build at all.
+
+That trade is the honest version. Unit operations are not simply better; they relocate
+difficulty from implementation to coordination.
+
 ### 5.2 What my teammates needed from me
 
 **Linky (world):** prefabs carry the exact case-sensitive tags `Obstacle`, `Coin`,
@@ -503,6 +623,34 @@ project's robustness.
 
 ## 7. Testing, evaluation, and decision-making
 
+The course requires all technical construction to be performed and tested. This section
+states what was actually verified, by what method, and what was not — because an honest
+account of coverage is more useful than a claim of correctness.
+
+### 7.0 What was verified, and how
+
+| Layer | Method | Status |
+|---|---|---|
+| Compilation | Compiled against Unity 6 engine assemblies after every change set | Passing, warnings understood and expected |
+| Asset reference integrity | Scripted audit that every GUID referenced by prefab, scene, controller and clips resolves to a real asset | Passing; caught two real breakages |
+| Sprite identifier uniqueness | Scripted audit for duplicate sprite IDs across all 156 imported sprites | Caught the flame bug described in 6.6 |
+| Mechanical correctness | Live observation in the sandbox via the debug overlay | Ongoing |
+| Feel | Play, adjust, replay in the sandbox | **Incomplete — see 12** |
+| Rule correctness in isolation | *Not covered.* Automated tests were removed with the abstracted architecture (6.1) | **Gap** |
+
+The asset-reference audit deserves note because it caught failures that would otherwise
+have presented as "nothing happens," which is the hardest class of bug to notice. Both
+real defects found during development — the invisible jetpack flame and a broken sprite
+reference — were found by scripted verification rather than by looking at the game.
+
+The last row is a genuine gap and a direct consequence of the architecture decision in
+6.1. I traded the ability to verify rules in isolation for iteration speed on feel. That
+was a defensible trade for a three-week prototype whose central claim is about feel, but
+it means the "exactly once" guarantees in 4.5 are asserted and observed rather than
+proven.
+
+### 7.1 Method for evaluating feel
+
 **Method.** Feel was evaluated in the sandbox scene by playing with hazards at varying
 densities and adjusting the four numbers live. The debug overlay made state and event
 counts visible so that mechanical correctness could be checked while playing rather than
@@ -523,13 +671,73 @@ must survive that deletion — the player's flame and shield load from it.
 
 ---
 
-## 8. Personal reflection
+## 8. Production process and role fulfilment
+
+Framed through Maxwell-Gardner, who treats production as a design constraint rather than
+administration downstream of design.
+
+### 8.1 Role division and the dependency-first approach
+
+The three slices were divided by system rather than by asset type — player, world, UI —
+which Maxwell-Gardner would recognise as feature ownership rather than discipline
+ownership. Each person owns a vertical slice including its logic and presentation.
+
+The production risk in that model is that features have interfaces, and interfaces are
+where parallel work stalls. My response was to specify and stub both of my interfaces
+before either counterpart existed:
+
+- The **inbound** interface (tags, trigger colliders, `ICoinValue`) was stubbed by the
+  sandbox spawner, so I could test contact handling without Linky's prefabs.
+- The **outbound** interface (four events, four properties, `ResetRun`) was stubbed by the
+  sandbox HUD, which then became the reference implementation handed to Unarine.
+
+This is the production decision I would defend most strongly. Neither teammate had to wait
+for my slice to be finished to begin building against it, and I did not have to wait for
+theirs.
+
+### 8.2 Production constraints that overrode technical preference
+
+Two occasions where the schedule shaped the design, which is Maxwell-Gardner's core claim
+in practice:
+
+1. **The abstracted architecture (6.1).** Technically the better structure. Removed
+   because it slowed the iteration loop that the hypothesis depends on. The constraint was
+   time-to-feedback, and it won.
+2. **The input fallback (6.5).** A prefab that silently cannot be played is a
+   collaboration hazard in a shared project, not just a bug. Designed for the failure mode
+   of a teammate opening my prefab, not for the happy path.
+
+### 8.3 Integration cadence — honest assessment
+
+The brief requires a build every two days and explicitly warns against merging the whole
+project at the end. This is the criterion I can assess least favourably.
+
+**What the repository shows.** Work accumulated substantially before the first integration
+commit, and the remote configuration changed partway through the project — the team moved
+from an individually-owned repository to a shared one, with branches reorganised around
+personal names rather than features. That reorganisation is itself evidence that the
+integration strategy was settled during development rather than before it.
+
+**Identified risks that remain.** Three files are edited by all three slices and are the
+predicted conflict points: `ProjectSettings/TagManager.asset`,
+`ProjectSettings/EditorSettings.asset`, and the shared scene. I flagged these and kept
+project-settings changes in separate commits so they could be reviewed independently, but
+flagging a risk is not the same as mitigating it.
+
+▸ *Ako: this section needs your account of what actually happened. Did the team produce
+builds on a two-day cadence? If not, what prevented it, and what would you do differently?
+This is a criterion the brief states explicitly, so an honest negative answer with analysis
+scores better than silence.*
+
+---
+
+## 9. Personal reflection
 
 > **This section needs Ako's own voice.** The factual scaffolding is below; the
 > judgements should be yours, and a marker will be able to tell the difference. Prompts
 > are marked with ▸.
 
-### 8.1 On my system
+### 9.1 On my system
 
 **What worked.** The force-based controller does produce the continuous expressive range
 the hypothesis predicted — holding the button for different durations produces genuinely
@@ -549,7 +757,7 @@ match what you expected before you played it?*
 ▸ *Was abandoning the abstracted architecture the right call in hindsight, or did losing
 automated tests cost you later?*
 
-### 8.2 On the hypothesis
+### 9.2 On the hypothesis
 
 The hypothesis held up in the direction it predicted: changing the thrust-to-gravity
 ratio while leaving input handling untouched produced recognisably different games —
@@ -562,12 +770,31 @@ hazard density and approach speed, which live in Linky's slice. A more complete
 hypothesis would be about the relationship between response latency and problem density,
 not about the player controller alone.
 
+**Read through Bogost, that incompleteness is predictable rather than accidental.** If
+gameplay meaning is a property of how units combine rather than a property of any single
+unit, then a hypothesis scoped to one unit was always going to be partial. I framed the
+interrogation around the player controller because that was the unit I owned, which is an
+honest constraint of the assignment, but it means I framed a configuration question as a
+component question. The stronger version of the hypothesis is about the *relation* between
+the player unit and the world unit — and testing it properly would have required Linky's
+spawner, not my sandbox stand-in.
+
+**Read through Anthropy and Clark, the finding is sharper than I expected.** Their claim
+that a verb is constituted by its resistance turned out to be literally operational, not
+metaphorical. I changed the game's verb repeatedly without touching the code that reads
+the button. The input handling is a control variable that never varied, and the verb
+changed anyway. That is about as direct a demonstration of their argument as a prototype
+can produce, and I did not anticipate it going in.
+
+▸ *Do you agree that the expressiveness is structural rather than in the input? Or did
+tuning reveal something the hypothesis does not account for?*
+
 ▸ *Did anything about the original game surprise you once you tried to rebuild it?*
 
 ▸ *Would you now say the expressiveness is in the physics, or in the interaction between
 physics and level pacing?*
 
-### 8.3 On group workflow
+### 9.3 On group workflow
 
 ▸ *This part I cannot write for you — I have no visibility into how the three of you
 actually communicated. Things worth addressing honestly:*
@@ -586,7 +813,7 @@ actually communicated. Things worth addressing honestly:*
 
 ---
 
-## 9. Project plan — systems and dependencies
+## 10. Project plan — systems and dependencies
 
 ```mermaid
 graph TD
@@ -641,7 +868,7 @@ blocked the others.
 
 ---
 
-## 10. Assets and licensing
+## 11. Assets and licensing
 
 All art is by **Kenney** (<https://kenney.nl>) under **CC0 1.0 Universal** — public
 domain, no attribution legally required, no restriction on academic or commercial use.
@@ -656,7 +883,7 @@ the game's mechanics using no Halfbrick artwork, audio, or trademarks.
 
 ---
 
-## 11. Current state and outstanding work
+## 12. Current state and outstanding work
 
 **Working:** thrust and fall against gravity, vertical speed clamping, bounds
 containment, fixed horizontal lock, three animation states, tag-based collision routing,
