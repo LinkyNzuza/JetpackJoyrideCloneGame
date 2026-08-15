@@ -38,6 +38,29 @@ namespace Game.EditorTools
         private const string ScenePath = "Assets/Scenes/Playable.unity";
         private const string PlayerPrefabPath = "Assets/Prefabs/Player.prefab";
         private const string BackgroundFolder = "Assets/Art/Backgrounds";
+        private const string HazardFolder = "Assets/Art/Hazards";
+        private const string CoinFolder = "Assets/Art/Coins";
+        private const string PowerUpFolder = "Assets/Art/PowerUps";
+
+        // Two saw frames, picked between per spawn so a long run is not visually identical. A saw is
+        // rotationally symmetric, which is why it reads correctly floating in mid-air where a spike
+        // would look wrong for having no surface to grow from.
+        private static readonly string[] ObstacleSprites = { "saw", "saw_move" };
+
+        // Matched to ObstacleDirector's coin tiers by name, so the values and weights stay owned there
+        // and are not duplicated here.
+        private static readonly (string Tier, string Sprite)[] CoinSprites =
+        {
+            ("Bronze", "coin_bronze"),
+            ("Silver", "coin_silver"),
+            ("Gold", "coin_gold")
+        };
+
+        private const string ShieldSprite = "powerup_bubble";
+
+        // Stand-in. There is no magnet pictogram in the art set, so this is the blank badge from the
+        // same family as the shield, and the director tints it purple to tell them apart.
+        private const string MagnetSprite = "powerup_empty";
 
         // The X the player controller captures as its permanent lock in Awake and never releases.
         // Matches the spawn SampleScene already uses. Left of centre, so obstacles arriving from the
@@ -193,7 +216,65 @@ namespace Game.EditorTools
             var go = new GameObject("World");
             ObstacleDirector director = go.AddComponent<ObstacleDirector>();
             SetReference(director, "_player", player.GetComponent<PlayerController>());
+            AssignWorldSprites(director);
             return director;
+        }
+
+        /// <summary>
+        /// Fills the director's sprite slots so the world spawns real art rather than the flat coloured
+        /// rectangles it falls back to. The prefab fields are left empty on purpose: they take priority
+        /// over these, so authored prefabs will override this without anyone editing code.
+        /// </summary>
+        private static void AssignWorldSprites(ObstacleDirector director)
+        {
+            var so = new SerializedObject(director);
+
+            SerializedProperty obstacles = so.FindProperty("_obstacleSprites");
+            if (obstacles != null)
+            {
+                obstacles.arraySize = ObstacleSprites.Length;
+                for (int i = 0; i < ObstacleSprites.Length; i++)
+                    obstacles.GetArrayElementAtIndex(i).objectReferenceValue =
+                        LoadSprite($"{HazardFolder}/{ObstacleSprites[i]}.png");
+            }
+
+            SerializedProperty shield = so.FindProperty("_shieldSprite");
+            if (shield != null)
+                shield.objectReferenceValue = LoadSprite($"{PowerUpFolder}/{ShieldSprite}.png");
+
+            SerializedProperty magnet = so.FindProperty("_magnetSprite");
+            if (magnet != null)
+                magnet.objectReferenceValue = LoadSprite($"{PowerUpFolder}/{MagnetSprite}.png");
+
+            // Matched by tier name rather than by index, so reordering or renaming the tiers in the
+            // director cannot silently pair a gold value with a bronze sprite.
+            SerializedProperty tiers = so.FindProperty("_coinTiers");
+            if (tiers != null)
+            {
+                for (int i = 0; i < tiers.arraySize; i++)
+                {
+                    SerializedProperty tier = tiers.GetArrayElementAtIndex(i);
+                    string name = tier.FindPropertyRelative("Name").stringValue;
+
+                    bool matched = false;
+                    foreach ((string tierName, string spriteName) in CoinSprites)
+                    {
+                        if (tierName != name) continue;
+
+                        tier.FindPropertyRelative("Sprite").objectReferenceValue =
+                            LoadSprite($"{CoinFolder}/{spriteName}.png");
+                        matched = true;
+                        break;
+                    }
+
+                    if (!matched)
+                        Debug.LogWarning(
+                            $"[PlayableSceneBuilder] Coin tier '{name}' has no sprite mapping, so it " +
+                            "will spawn as a flat rectangle.");
+                }
+            }
+
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static CoinMagnet BuildMagnet(GameObject player, ObstacleDirector director)

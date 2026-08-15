@@ -10,6 +10,7 @@
 //
 // This reads only the player's published state and never writes to it.
 
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using Game.Player;
@@ -22,6 +23,37 @@ namespace Game.World
     [DisallowMultipleComponent]
     public sealed class ObstacleDirector : MonoBehaviour
     {
+        /// <summary>
+        /// One grade of coin: its sprite, what it scores, and how often it appears.
+        /// <para>
+        /// The values are a geometric ladder, 1 / 5 / 25, rather than three numbers close together.
+        /// The magnet pulls coins in bunches, so if the grades scored similarly the three sprites
+        /// would carry no information and there would be no reason to ever divert for one. At 25 a
+        /// gold is worth twenty-five bronze, which makes going out of your way for it a real
+        /// decision. Round numbers so a player can total them in their head, and small enough that a
+        /// long run stays inside a three or four digit readout. All well within the 1..1000 that
+        /// PlayerCollision clamps to.
+        /// </para>
+        /// </summary>
+        [Serializable]
+        public sealed class CoinTier
+        {
+            public string Name;
+            public Sprite Sprite;
+
+            [Range(1, 1000)] public int Value;
+
+            [Tooltip("Relative chance of this tier. Weights are normalised, so they need not sum to 1.")]
+            [Range(0f, 1f)] public float Weight;
+
+            public CoinTier(string name, int value, float weight)
+            {
+                Name = name;
+                Value = value;
+                Weight = weight;
+            }
+        }
+
         [Header("Player")]
         [Tooltip("Player to read state and movement capability from. Found automatically if left empty.")]
         [SerializeField] private PlayerController _player;
@@ -46,14 +78,48 @@ namespace Game.World
         [SerializeField, Range(1f, 3f)] private float _spacingSafetyFactor = 1.15f;
 
         [Header("Prefabs (optional)")]
-        [Tooltip("Obstacle prefab. Must carry the Obstacle tag. A flat sprite is generated if empty.")]
+        // Still here, still first in line. When Linky authors real prefabs they take over from the
+        // sprite path below without this file changing. Three routes in priority order: prefab, then
+        // sprite, then a generated flat rectangle, so the world always spawns something.
+        [Tooltip("Obstacle prefab. Must carry the Obstacle tag. Falls back to the sprites below.")]
         [SerializeField] private GameObject _obstaclePrefab;
 
-        [Tooltip("Coin prefab. Must carry the Coin tag. A flat sprite is generated if empty.")]
+        [Tooltip("Coin prefab. Must carry the Coin tag. Falls back to the sprites below.")]
         [SerializeField] private GameObject _coinPrefab;
 
-        [Tooltip("Power-up prefab. Must carry a PowerUp tag. A flat sprite is generated if empty.")]
+        [Tooltip("Power-up prefab. Must carry a PowerUp tag. Falls back to the sprites below.")]
         [SerializeField] private GameObject _powerUpPrefab;
+
+        [Header("Sprites (used when no prefab is set)")]
+        [Tooltip("Obstacle sprites. One is chosen at random per spawn, so a run is not visually " +
+                 "identical. Empty falls back to a flat red rectangle.")]
+        [SerializeField] private Sprite[] _obstacleSprites;
+
+        [Tooltip("Shield power-up sprite. Empty falls back to a flat blue square.")]
+        [SerializeField] private Sprite _shieldSprite;
+
+        [Tooltip("Magnet power-up sprite. Empty falls back to a flat purple square.")]
+        [SerializeField] private Sprite _magnetSprite;
+
+        // Tinted rather than left white, because the source badge carries no magnet pictogram. See the
+        // note on MagnetTint below.
+        [Tooltip("Tint applied to the magnet sprite so it cannot be mistaken for the shield.")]
+        [SerializeField] private Color _magnetTint = new Color(0.65f, 0.42f, 0.95f, 1f);
+
+        [Header("Coins")]
+        // Three tiers with a geometric value ladder. See CoinTier for why these numbers.
+        [SerializeField]
+        private CoinTier[] _coinTiers =
+        {
+            new CoinTier("Bronze", 1, 0.70f),
+            new CoinTier("Silver", 5, 0.25f),
+            new CoinTier("Gold", 25, 0.05f)
+        };
+
+        [Header("Power-up mix")]
+        [Tooltip("Chance a power-up spawn is a magnet rather than a shield. Before this existed the " +
+                 "world only ever tagged PowerUp_Shield, so the magnet never appeared at all.")]
+        [SerializeField, Range(0f, 1f)] private float _magnetShare = 0.5f;
 
         [Header("Diagnostics")]
         [Tooltip("Report each tier change, and every time the reach bound raises the spacing.")]
@@ -75,6 +141,10 @@ namespace Game.World
         private bool _reportedSpacingRaise;
         private bool _frozen;
         private Camera _camera;
+
+        // System.Random rather than UnityEngine.Random, matching PatternGenerator, so the visual
+        // choices are part of the same reproducible stream as the layout choices.
+        private readonly System.Random _visualRandom = new System.Random();
 
         private static Sprite _obstacleSprite;
         private static Sprite _coinSprite;
@@ -345,56 +415,190 @@ namespace Game.World
             switch (content)
             {
                 case BandContent.Obstacle:
-                    return _obstaclePrefab != null
-                        ? Instantiate(_obstaclePrefab, position, Quaternion.identity).transform
-                        : BuildStandIn("Obstacle", position, new Color(0.85f, 0.2f, 0.2f),
-                            new Vector2(0.8f, 1.6f), ref _obstacleSprite, false);
+                    if (_obstaclePrefab != null)
+                        return Instantiate(_obstaclePrefab, position, Quaternion.identity).transform;
+                    return BuildObstacle(position);
 
                 case BandContent.Coin:
-                    return _coinPrefab != null
-                        ? Instantiate(_coinPrefab, position, Quaternion.identity).transform
-                        : BuildStandIn("Coin", position, new Color(0.95f, 0.8f, 0.15f),
-                            new Vector2(0.5f, 0.5f), ref _coinSprite, true);
+                    if (_coinPrefab != null)
+                        return Instantiate(_coinPrefab, position, Quaternion.identity).transform;
+                    return BuildCoin(position);
 
                 case BandContent.PowerUp:
-                    return _powerUpPrefab != null
-                        ? Instantiate(_powerUpPrefab, position, Quaternion.identity).transform
-                        : BuildStandIn("PowerUp_Shield", position, new Color(0.25f, 0.6f, 0.95f),
-                            new Vector2(0.6f, 0.6f), ref _powerUpSprite, true);
+                    if (_powerUpPrefab != null)
+                        return Instantiate(_powerUpPrefab, position, Quaternion.identity).transform;
+                    return BuildPowerUp(position);
 
                 default:
                     return null;
             }
         }
 
-        // Stand-in objects so the world runs before any art is imported, following the same approach as
-        // the sandbox scene. Colour coded rather than pretty: red blocks, gold coins, blue power-ups.
-        private Transform BuildStandIn(
+        // A saw is rotationally symmetric, which is why it works floating in mid-air where a spike
+        // would look wrong for having no surface to grow from. Several sprites are supported and one is
+        // picked per spawn, so a long run is not visually identical.
+        private Transform BuildObstacle(Vector3 position)
+        {
+            Sprite sprite = PickObstacleSprite();
+
+            // Solid, not a trigger, as specified. Worth knowing: a shielded player survives the hit
+            // but the obstacle is not released, because PlayerCollision only releases coins and
+            // power-ups. The player therefore ends up inside a solid collider that this director is
+            // translating while PlayerController re-locks X and clamps Y every FixedUpdate, so expect
+            // jitter on a shielded hit. Making obstacles triggers, or releasing an absorbed obstacle,
+            // would both fix it; both are decisions for whoever owns collision.
+            return Build("Obstacle", position, sprite, Color.white,
+                new Color(0.85f, 0.2f, 0.2f), new Vector2(0.8f, 1.6f),
+                ref _obstacleSprite, trigger: false, colliderScale: 0.9f, value: 0);
+        }
+
+        private Transform BuildCoin(Vector3 position)
+        {
+            CoinTier tier = PickCoinTier();
+            Sprite sprite = tier != null ? tier.Sprite : null;
+            int value = tier != null ? tier.Value : 1;
+
+            return Build("Coin", position, sprite, Color.white,
+                new Color(0.95f, 0.8f, 0.15f), new Vector2(0.5f, 0.5f),
+                ref _coinSprite, trigger: true, colliderScale: 1f, value: value);
+        }
+
+        private Transform BuildPowerUp(Vector3 position)
+        {
+            bool magnet = NextFloat() < _magnetShare;
+
+            // The magnet sprite is a stand-in and is knowingly wrong. There is no magnet pictogram
+            // anywhere in the art set, and every alternative asserts something false: wings mean
+            // flight, a bunny means jump, the jetpack badge means the pack he is already wearing, a gem
+            // or star means collectible. powerup_empty is the same blue badge as the shield, so the two
+            // read as one category of pickup, and being blank it says "art pending" rather than lying.
+            // The tint is what makes them tellable apart in play, and purple is the colour the sandbox
+            // HUD already used for magnet. Replace the sprite, not the tint, when real art arrives.
+            string tag = magnet ? "PowerUp_Magnet" : "PowerUp_Shield";
+            Sprite sprite = magnet ? _magnetSprite : _shieldSprite;
+            Color tint = magnet ? _magnetTint : Color.white;
+            Color fallback = magnet
+                ? new Color(0.65f, 0.42f, 0.95f)
+                : new Color(0.25f, 0.6f, 0.95f);
+
+            return Build(tag, position, sprite, tint, fallback, new Vector2(0.6f, 0.6f),
+                ref _powerUpSprite, trigger: true, colliderScale: 1f, value: 0);
+        }
+
+        private Sprite PickObstacleSprite()
+        {
+            if (_obstacleSprites == null || _obstacleSprites.Length == 0) return null;
+
+            // Random.Next rather than UnityEngine.Random, matching PatternGenerator, so a seeded run
+            // stays reproducible.
+            int index = _visualRandom.Next(_obstacleSprites.Length);
+            return _obstacleSprites[index];
+        }
+
+        private CoinTier PickCoinTier()
+        {
+            if (_coinTiers == null || _coinTiers.Length == 0) return null;
+
+            float total = 0f;
+            for (int i = 0; i < _coinTiers.Length; i++)
+                if (_coinTiers[i] != null) total += Mathf.Max(0f, _coinTiers[i].Weight);
+
+            if (total <= 0f) return _coinTiers[0];
+
+            float roll = NextFloat() * total;
+            for (int i = 0; i < _coinTiers.Length; i++)
+            {
+                CoinTier tier = _coinTiers[i];
+                if (tier == null) continue;
+
+                roll -= Mathf.Max(0f, tier.Weight);
+                if (roll <= 0f) return tier;
+            }
+
+            return _coinTiers[_coinTiers.Length - 1];
+        }
+
+        private float NextFloat() => (float)_visualRandom.NextDouble();
+
+        /// <summary>
+        /// Builds one world object. Uses <paramref name="sprite"/> when there is one and falls back to a
+        /// generated flat rectangle when there is not, so the world still runs with no art assigned.
+        /// <para>
+        /// The collider is sized from the sprite rather than from the old hard-coded rectangle, because
+        /// real sprites have their own proportions and the previous numbers described a shape that no
+        /// longer exists. A circle is used when the sprite is roughly square: a saw and a coin are both
+        /// round, and a box around a round sprite kills on a corner the player can see is empty.
+        /// </para>
+        /// </summary>
+        private Transform Build(
             string tagName,
             Vector3 position,
-            Color colour,
-            Vector2 size,
-            ref Sprite cached,
-            bool trigger)
+            Sprite sprite,
+            Color tint,
+            Color fallbackColour,
+            Vector2 fallbackSize,
+            ref Sprite cachedFallback,
+            bool trigger,
+            float colliderScale,
+            int value)
         {
-            if (cached == null) cached = BuildSprite(colour);
+            bool usingFallback = sprite == null;
+
+            if (usingFallback)
+            {
+                if (cachedFallback == null) cachedFallback = BuildSprite(fallbackColour);
+                sprite = cachedFallback;
+            }
 
             var go = new GameObject($"World_{tagName}");
             go.transform.position = position;
-            go.transform.localScale = new Vector3(size.x, size.y, 1f);
+
+            // Scale only ever shapes the generated rectangle. Real sprites are used at their authored
+            // size, so nothing is resampled and the art stays as crisp as it was drawn.
+            go.transform.localScale = usingFallback
+                ? new Vector3(fallbackSize.x, fallbackSize.y, 1f)
+                : Vector3.one;
 
             var renderer = go.AddComponent<SpriteRenderer>();
-            renderer.sprite = cached;
-            renderer.color = colour;
+            renderer.sprite = sprite;
+            renderer.color = usingFallback ? fallbackColour : tint;
 
-            var collider = go.AddComponent<BoxCollider2D>();
-            collider.isTrigger = trigger;
+            AddCollider(go, sprite, usingFallback, trigger, colliderScale);
+
+            if (value > 0) go.AddComponent<WorldCoin>().SetValue(value);
 
             if (IsTagRegistered(tagName)) go.tag = tagName;
             else Debug.LogError($"[ObstacleDirector] Tag '{tagName}' is not registered, so the player " +
                                 "will ignore this object. Add it in Tags and Layers.", this);
 
             return go.transform;
+        }
+
+        private static void AddCollider(
+            GameObject go, Sprite sprite, bool usingFallback, bool trigger, float colliderScale)
+        {
+            // The generated rectangle is shaped by localScale, so a unit box is already the right size.
+            if (usingFallback)
+            {
+                var box = go.AddComponent<BoxCollider2D>();
+                box.isTrigger = trigger;
+                return;
+            }
+
+            Vector2 size = sprite.bounds.size;
+            bool roughlySquare = Mathf.Abs(size.x - size.y) <= Mathf.Max(size.x, size.y) * 0.2f;
+
+            if (roughlySquare)
+            {
+                var circle = go.AddComponent<CircleCollider2D>();
+                circle.radius = Mathf.Min(size.x, size.y) * 0.5f * colliderScale;
+                circle.isTrigger = trigger;
+                return;
+            }
+
+            var fitted = go.AddComponent<BoxCollider2D>();
+            fitted.size = size * colliderScale;
+            fitted.isTrigger = trigger;
         }
 
         private static Sprite BuildSprite(Color colour)
