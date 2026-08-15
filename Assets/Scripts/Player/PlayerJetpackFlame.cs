@@ -58,15 +58,15 @@ namespace Game.Player
                 return;
             }
 
-            // Load by name rather than relying on serialized sprite references. This keeps the
-            // effect working regardless of how the textures were imported or re-imported.
+            // Load by name rather than relying on serialized sprite references, and go through the
+            // loader so a texture that imported without sprite sub-assets still produces frames.
             if (_frames == null || _frames.Length == 0)
             {
-                Sprite[] loaded = Resources.LoadAll<Sprite>(FramesResourcePath);
+                Sprite[] loaded = SpriteFrameLoader.Load(FramesResourcePath, out string route);
                 if (loaded != null && loaded.Length > 0)
                 {
-                    System.Array.Sort(loaded, (a, b) => string.CompareOrdinal(a.name, b.name));
                     _frames = loaded;
+                    Debug.Log($"[PlayerJetpackFlame] Loaded {route} from Resources/{FramesResourcePath}.", this);
                 }
             }
 

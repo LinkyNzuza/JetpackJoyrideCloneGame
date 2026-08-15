@@ -61,14 +61,15 @@ namespace Game.Player
                 return;
             }
 
-            // Loaded by name so the effect survives any re-import of the source textures.
+            // Loaded by name, through the loader, so the bubble survives whatever the textures
+            // imported as.
             if (_frames == null || _frames.Length == 0)
             {
-                Sprite[] loaded = Resources.LoadAll<Sprite>(FramesResourcePath);
+                Sprite[] loaded = SpriteFrameLoader.Load(FramesResourcePath, out string route);
                 if (loaded != null && loaded.Length > 0)
                 {
-                    System.Array.Sort(loaded, (a, b) => string.CompareOrdinal(a.name, b.name));
                     _frames = loaded;
+                    Debug.Log($"[PlayerShieldVisual] Loaded {route} from Resources/{FramesResourcePath}.", this);
                 }
             }
 
