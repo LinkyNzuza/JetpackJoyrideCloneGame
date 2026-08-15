@@ -73,8 +73,8 @@ namespace Game.World
         private float _currentSpacing;
         private int _reportedTier = -1;
         private bool _reportedSpacingRaise;
+        private bool _frozen;
         private Camera _camera;
-        private System.Action _handleRunReset;
 
         private static Sprite _obstacleSprite;
         private static Sprite _coinSprite;
@@ -85,8 +85,35 @@ namespace Game.World
         /// <summary>Metres travelled in the current run. This is the group's progression measure.</summary>
         public float Distance => _distance;
 
-        /// <summary>Current scroll speed, in metres per second.</summary>
+        /// <summary>
+        /// Speed the pace curve prescribes at the current distance, in metres per second. This keeps
+        /// its meaning while the world is frozen, because it answers a design question rather than a
+        /// rendering one, and the difficulty data will want it.
+        /// </summary>
         public float ScrollSpeed => _speed;
+
+        /// <summary>
+        /// How fast the world is actually moving this frame: <see cref="ScrollSpeed"/> normally, zero
+        /// while frozen.
+        /// <para>
+        /// Anything that scrolls to match the obstacles must read this and not
+        /// <see cref="ScrollSpeed"/>. A parallax background reading the raw curve speed would keep
+        /// sliding after death while the obstacles stood still, which reads as more broken than the
+        /// obstacles sliding past a corpse did.
+        /// </para>
+        /// </summary>
+        public float EffectiveScrollSpeed => IsFrozen ? 0f : _speed;
+
+        /// <summary>
+        /// True while the world is holding still. Frozen means no spawning, no scrolling, no
+        /// recycling and no distance accruing: everything stays exactly where it was.
+        /// <para>
+        /// Two things can freeze the world. The run owner calls <see cref="Freeze"/>, and that is the
+        /// intended path. A dead player also freezes it, so the director stays correct on its own in
+        /// a scene that has no run owner, which is how it existed before one was written.
+        /// </para>
+        /// </summary>
+        public bool IsFrozen => _frozen || (_player != null && !_player.IsAlive);
 
         /// <summary>Zero-based difficulty tier the run is currently in.</summary>
         public int TierIndex => _curve != null ? _curve.TierAt(_distance) : 0;
@@ -111,19 +138,27 @@ namespace Game.World
             if (_player == null)
                 Debug.LogError("[ObstacleDirector] No PlayerController found. Nothing will spawn.", this);
 
-            _handleRunReset = ResetRun;
             Rebuild();
         }
 
-        private void OnEnable()
-        {
-            if (_player != null) _player.OnPlayerDeath += _handleRunReset;
-        }
+        // This used to subscribe ResetRun to OnPlayerDeath, which was wrong. It wiped the world at the
+        // instant of death, so the player's corpse sat on a freshly respawned obstacle field and they
+        // never got to see what killed them. Worse, distance went to zero before anything could read
+        // the run's final value.
+        //
+        // Reset now belongs to whoever owns the run, on retry only. Death freezes instead.
 
-        private void OnDisable()
-        {
-            if (_player != null) _player.OnPlayerDeath -= _handleRunReset;
-        }
+        /// <summary>
+        /// Stops the world without clearing it. Called by the run owner on death, so the player can
+        /// see the obstacle that killed them still sitting where it was.
+        /// </summary>
+        public void Freeze() => _frozen = true;
+
+        /// <summary>
+        /// Lets the world move again. <see cref="ResetRun"/> does this already; this exists for a
+        /// pause that is not a death.
+        /// </summary>
+        public void Unfreeze() => _frozen = false;
 
         /// <summary>
         /// Rebuilds the pace curve and the reach model from the player's current values. Called at
@@ -167,8 +202,8 @@ namespace Game.World
         }
 
         /// <summary>
-        /// Clears the world and puts distance and speed back to the start of a run. Wired to the
-        /// player's death event, and safe to call directly from the interface system's retry path.
+        /// Clears the world, puts distance and speed back to the start of a run, and unfreezes.
+        /// Called by the run owner on retry. Nothing calls this on death any more.
         /// </summary>
         public void ResetRun()
         {
@@ -181,6 +216,7 @@ namespace Game.World
             _metresSinceLastSet = 0f;
             _reportedTier = -1;
             _reportedSpacingRaise = false;
+            _frozen = false;
             _speed = _curve != null ? _curve.SpeedAt(0f) : 0f;
             _currentSpacing = ResolveSpacing();
         }
@@ -192,22 +228,28 @@ namespace Game.World
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            // Distance only accrues while the player is alive, so the game-over screen does not inflate
-            // the distance the run is recorded at.
-            if (_player.IsAlive)
+            // One gate for the whole tick. Everything below is a switch that a frozen world needs off,
+            // and they are all here rather than scattered as separate IsAlive checks, so "what does
+            // freezing actually stop" has a single answer someone can read.
+            //
+            // Advancing distance and speed: off, so a game-over screen cannot inflate the distance the
+            // run gets recorded at. Spawning: off, so nothing new arrives behind a dead player.
+            // Scrolling and recycling: off, and note those two are one switch rather than two, because
+            // ScrollAndRecycle both moves the transforms and destroys whatever passes the despawn edge.
+            // Nothing reaches that edge if nothing moves.
+            if (IsFrozen) return;
+
+            _speed = _curve.SpeedAt(_distance);
+            _distance += _speed * dt;
+            _metresSinceLastSet += _speed * dt;
+
+            ReportTierChange();
+
+            _currentSpacing = ResolveSpacing();
+            if (_metresSinceLastSet >= _currentSpacing)
             {
-                _speed = _curve.SpeedAt(_distance);
-                _distance += _speed * dt;
-                _metresSinceLastSet += _speed * dt;
-
-                ReportTierChange();
-
-                _currentSpacing = ResolveSpacing();
-                if (_metresSinceLastSet >= _currentSpacing)
-                {
-                    _metresSinceLastSet = 0f;
-                    SpawnSet();
-                }
+                _metresSinceLastSet = 0f;
+                SpawnSet();
             }
 
             ScrollAndRecycle(dt);
