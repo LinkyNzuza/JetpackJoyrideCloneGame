@@ -70,12 +70,45 @@ namespace Game.EditorTools
         // Parallax rises towards the front. The sky barely drifts, the ground almost keeps pace with
         // the obstacles. All sorting orders are below the flame at -2, so nothing here can draw over
         // the player.
+        //
+        // Every Y below is derived from the sprite's measured height and the play bounds, not chosen
+        // by eye. All these sprites are centre-pivot at 100 pixels per unit with no transparent
+        // padding, so the transform Y is the sprite's centre and half its height reaches each edge.
+        //
+        // GROUND. groundLayer2 is 1024x200, so 2.00 units tall, half-height 1.00. The player's play
+        // bounds are -4 to +4 and they can pin against -4, so the ground's top edge belongs on that
+        // line rather than floating above it: centre = -4.00 - 1.00 = -5.00. Top edge -4.00, bottom
+        // edge -6.00. The screen bottom is -5.00, so exactly 1.00 unit of it is visible, a tenth of
+        // the ten-unit view. Its grass tufts occupy the first 40 rows, -4.00 down to -4.40, and a
+        // player pinned at the floor has its sprite bottom at -4.55 and draws at order 0 in front of
+        // this at -70, so its legs overlap the tufts and it reads as skimming the surface.
+        //
+        // The previous table used groundLayer1 at -3.4. That is 1024x400, so it spanned -5.4 to -1.4:
+        // 3.6 visible units, over a third of the screen, with its top edge reaching towards the
+        // middle. That is what read as flying over a lake.
+        //
+        // SKY. backgroundEmpty rather than backgroundColorGrass. The latter has a hard green horizon
+        // baked in at row 638, only 1.26 units below its own centre, so putting that horizon on the
+        // mechanical floor forces its centre to -2.74 and leaves the top 2.6 units of screen blank.
+        // backgroundEmpty is the same palette as a clean gradient with no baked horizon, which lets
+        // the silhouette layers supply all the terrain.
+        //
+        // HAZE, not clouds. Every cloud sprite in this set is a band of cloud over a solid fill
+        // occupying its lower 60% - cloudLayer1/2 are opaque from row 160, cloudLayerB1/B2 from row
+        // 140. They are horizon haze banks, not floating clouds. Placed high, cloudLayerB2 drops a
+        // 2.6-unit pale slab across the upper screen with a hard edge; placed so the slab clears the
+        // top edge, the clouds themselves end up off-screen. So it is used as the haze it was drawn
+        // to be, which is also what makes the mountains behind it read as distant. High clouds would
+        // need new art or a crop.
+        //
+        // Note these layers are pale blue and near-white atmospheric silhouettes, not green terrain.
+        // The result is hazy depth rather than a landscape, which is what the art supports.
         private static readonly LayerDef[] Layers =
         {
-            new LayerDef("Sky",    "backgroundColorGrass", 0.05f,  0.0f, -100),
-            new LayerDef("Clouds", "cloudLayer1",          0.20f,  2.6f,  -90),
-            new LayerDef("Hills",  "hills",                0.45f, -1.4f,  -80),
-            new LayerDef("Ground", "groundLayer1",         0.80f, -3.4f,  -70)
+            new LayerDef("Sky",       "backgroundEmpty", 0.05f,  0.00f, -100),
+            new LayerDef("Haze",      "cloudLayerB2",    0.20f, -3.00f,  -90),
+            new LayerDef("Mountains", "mountains",       0.45f, -3.20f,  -80),
+            new LayerDef("Ground",    "groundLayer2",    0.80f, -5.00f,  -70)
         };
 
         [MenuItem("Tools/Jetpack/Build playable scene")]
