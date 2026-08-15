@@ -97,6 +97,33 @@ namespace Game.Player
         /// <summary>True while the Magnet power-up is active.</summary>
         public bool IsMagnetActive => _isMagnetActive;
 
+        // ── Movement capability, published so the world system can respect it ──────────
+        // The world owner needs these to work out how long the player takes to cross the
+        // play area, because that time is the ceiling on how dense an obstacle pattern can
+        // honestly get. Read-only on purpose: publishing the numbers is fine, letting
+        // another system write them is not.
+
+        /// <summary>Upward force applied per tick while thrusting, in newtons.</summary>
+        public float ThrustForce => _thrustForce;
+
+        /// <summary>Gravity scale applied to the body.</summary>
+        public float GravityScale => _gravityScale;
+
+        /// <summary>Upper bound on upward speed, in metres per second.</summary>
+        public float MaxRiseSpeed => _maxRiseSpeed;
+
+        /// <summary>Upper bound on downward speed magnitude, in metres per second.</summary>
+        public float MaxFallSpeed => _maxFallSpeed;
+
+        /// <summary>World-space Y floor of the play area.</summary>
+        public float PlayBoundsMinY => _playBoundsMinY;
+
+        /// <summary>World-space Y ceiling of the play area.</summary>
+        public float PlayBoundsMaxY => _playBoundsMaxY;
+
+        /// <summary>Mass of the body, needed to turn thrust in newtons into an acceleration.</summary>
+        public float BodyMass => _rb != null ? _rb.mass : 1f;
+
         // ──────────────────────────── Public Events ────────────────────────────────────
 
         /// <summary>Raised once when the player dies. Subscribe for game-over or respawn logic.</summary>

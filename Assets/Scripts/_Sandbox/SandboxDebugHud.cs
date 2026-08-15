@@ -80,6 +80,9 @@ namespace Game.Sandbox
             if (kb.digit1Key.wasPressedThisFrame) _player.ActivatePowerUp(PowerUpType.Shield);
             if (kb.digit2Key.wasPressedThisFrame) _player.ActivatePowerUp(PowerUpType.Magnet);
             if (kb.kKey.wasPressedThisFrame) _death?.RequestDeath();
+
+            // Standalone builds have no stop button. Ignored in the editor.
+            if (kb.escapeKey.wasPressedThisFrame) Application.Quit();
         }
 
         private void OnGUI()
@@ -109,7 +112,7 @@ namespace Game.Sandbox
                 Line($"Scroll: {_spawner.ScrollSpeed:0.0}   live objects: {_spawner.LiveCount}");
             y += 6f;
             Line("SPACE thrust   R reset   K kill");
-            Line("1 shield   2 magnet");
+            Line("1 shield   2 magnet   ESC quit");
             Line("Red=obstacle Gold=coin Blue=shield");
             Line("Purple=magnet");
         }
