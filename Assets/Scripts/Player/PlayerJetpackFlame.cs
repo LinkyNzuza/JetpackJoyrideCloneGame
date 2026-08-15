@@ -30,13 +30,19 @@ namespace Game.Player
         [SerializeField, Range(2f, 60f)] private float _framesPerSecond = 18f;
 
         [Header("Placement")]
+        // Y is set so the flame's top edge meets the jetpack's nozzle tips, which sit at the bottom
+        // of PlayerJetpackVisual's sprite. Change the pack's scale or offset and this has to move
+        // with it, or the flame detaches and stops reading as caused by the jetpack.
         [Tooltip("Local offset from the player's origin. Negative Y puts the flame below.")]
-        [SerializeField] private Vector2 _localOffset = new Vector2(-0.18f, -0.34f);
+        [SerializeField] private Vector2 _localOffset = new Vector2(-0.22f, -0.765f);
 
-        [SerializeField, Range(0.05f, 3f)] private float _scale = 0.55f;
+        // Tuning: sized so the plume is wide enough to span both of the pack's nozzles rather than
+        // sitting in the gap between them. Drop it and the flame reads as a separate object.
+        [SerializeField, Range(0.05f, 3f)] private float _scale = 1.65f;
 
-        [Tooltip("Sorting order relative to the player sprite. Negative draws behind.")]
-        [SerializeField] private int _sortingOrder = -1;
+        [Tooltip("Sorting order relative to the player sprite. Must be behind the pack at -1, so " +
+                 "the flame emerges from under the nozzles rather than over them.")]
+        [SerializeField] private int _sortingOrder = -2;
 
         private PlayerController _controller;
         private SpriteRenderer _renderer;

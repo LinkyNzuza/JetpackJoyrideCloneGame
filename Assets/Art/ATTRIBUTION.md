@@ -38,6 +38,18 @@ author, not from the mirror.
 | `Player/Jetpack/` | 8 flame frames (fire00-07) | Space Shooter Redux `PNG/Effects` |
 | `Coins/` | 3 coin tiers, 4 gems, 1 star | Jumper Pack `PNG/HUD`, Platformer Pack Redux `PNG/Items` |
 | `PowerUps/` | 5 power-up icons, 3 shield frames, 2 star frames | Jumper Pack `PNG/Items`, Space Shooter Redux `PNG/Effects` |
+
+## Derived files
+
+Files we generated from Kenney originals. CC0 places no restriction on
+modification, so these carry the same licence as their source.
+
+| Derived file | Source | Made by | How |
+|---|---|---|---|
+| `Assets/Resources/PlayerGear/Jetpack/jetpack.png` | `Assets/Art/PowerUps/powerup_jetpack.png` (Kenney, CC0) | `Assets/Editor/JetpackSpriteBuilder.cs` | The source is a 71x70 round UI badge: a blue disc with a white jetpack pictogram on it. The builder keeps only pixels at or above 235 on every channel, discards the disc, and crops to the pictogram's ink box at x[25..44] y[20..50] top-down, giving a 20x31 white-on-transparent sprite that is tinted at runtime. |
+
+The original `powerup_jetpack.png` is unmodified and stays where it is. Re-run
+the derivation from **Tools > Jetpack > Rebuild worn jetpack sprite**.
 | `Hazards/` | 27 laser sprites, 4 spikes, 6 saw sprites | Space Shooter Redux `PNG/Lasers`, Jumper Pack `PNG/Environment`, Platformer Pack Redux `PNG/Enemies` |
 | `Backgrounds/` | 8 full backgrounds, 12 parallax elements | Background Elements Redux `Backgrounds` |
 
