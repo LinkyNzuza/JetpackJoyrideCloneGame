@@ -90,8 +90,7 @@ namespace Game.World
             // filtered: matching is by tag, exactly as PlayerCollision does it. A layer mask would be
             // cheaper, but a mask set to Nothing fails silently, and this project has lost enough time
             // to configuration that fails quietly.
-            _filter = new ContactFilter2D();
-            _filter.NoFilter();
+            _filter = ContactFilter2D.noFilter;
             _filter.useTriggers = true;
         }
 
