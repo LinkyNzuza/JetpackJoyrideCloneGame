@@ -34,8 +34,17 @@ namespace Game.World
         /// <summary>Chance that a band with no obstacle receives a coin.</summary>
         public float CoinChanceOnClearBand { get; set; } = 0.5f;
 
-        /// <summary>Chance that a band which would have received a coin receives a power-up instead.</summary>
-        public float PowerUpChanceInsteadOfCoin { get; set; } = 0.08f;
+        /// <summary>
+        /// Chance that a band which would have received a coin receives a power-up instead.
+        /// <para>
+        /// Raised from 0.08 after playtesting, where power-ups were reported as missing entirely. At
+        /// 0.08 the compound rate was 0.5 x 0.08 = 4% per clear band, and with about 1.5 clear bands
+        /// per set that is one power-up every seventeen sets. A set arrives roughly every two seconds
+        /// at the opening speed, so a player met one every thirty-three seconds while dying in ten to
+        /// twenty. A feature nobody ever sees is indistinguishable from a broken one.
+        /// </para>
+        /// </summary>
+        public float PowerUpChanceInsteadOfCoin { get; set; } = 0.18f;
 
         /// <summary>
         /// How many layouts to try before giving up and using the guaranteed-safe fallback. Bounded so a
@@ -51,6 +60,12 @@ namespace Game.World
 
         /// <summary>Counts how many times every attempt failed and the fallback was used.</summary>
         public int FallbacksUsed { get; private set; }
+
+        /// <summary>
+        /// How many power-ups were placed by the cadence guarantee rather than by a roll. A high share
+        /// means the probability is set too low to carry the rate on its own.
+        /// </summary>
+        public int GuaranteedPowerUps { get; private set; }
 
         public PatternGenerator(int seed)
         {
@@ -69,12 +84,18 @@ namespace Game.World
         /// <param name="geometry">Band heights for the current play area.</param>
         /// <param name="spacing">Horizontal gap to the previous set, in metres.</param>
         /// <param name="scrollSpeed">Current world speed, in metres per second.</param>
+        /// <param name="forcePowerUp">
+        /// When true, the first clear band in this set becomes a power-up regardless of the roll. The
+        /// caller uses this as a cadence guarantee so a run cannot go an arbitrarily long way without
+        /// one purely by bad luck. Probability alone made power-ups feel absent rather than rare.
+        /// </param>
         public ObstaclePattern Next(
             ObstaclePattern previous,
             PlayerReach reach,
             BandGeometry geometry,
             float spacing,
-            float scrollSpeed)
+            float scrollSpeed,
+            bool forcePowerUp = false)
         {
             int lowerBound = Clamp(MinObstacleBands, 0, 2);
             int upperBound = Clamp(MaxObstacleBands, lowerBound, 2);
@@ -86,7 +107,7 @@ namespace Game.World
 
                 if (IsPassable(previous, candidate, reach, geometry, spacing, scrollSpeed))
                 {
-                    FillClearBands(ref candidate);
+                    FillClearBands(ref candidate, forcePowerUp);
                     return candidate;
                 }
 
@@ -98,7 +119,7 @@ namespace Game.World
             // asking for something the character cannot deliver.
             FallbacksUsed++;
             ObstaclePattern safe = BuildFallback(previous, reach, geometry, spacing, scrollSpeed);
-            FillClearBands(ref safe);
+            FillClearBands(ref safe, forcePowerUp);
             return safe;
         }
 
@@ -212,16 +233,36 @@ namespace Game.World
             return best;
         }
 
-        private void FillClearBands(ref ObstaclePattern pattern)
+        private void FillClearBands(ref ObstaclePattern pattern, bool forcePowerUp)
         {
+            bool placedPowerUp = false;
+
             for (int band = 0; band < ObstaclePattern.BandCount; band++)
             {
                 if (pattern[band] != BandContent.Empty) continue;
+
+                // The cadence guarantee takes the first clear band it finds and ignores the coin roll
+                // entirely, so it cannot be swallowed by an unlucky pair of rolls the way an increased
+                // probability can.
+                if (forcePowerUp && !placedPowerUp)
+                {
+                    pattern[band] = BandContent.PowerUp;
+                    placedPowerUp = true;
+                    GuaranteedPowerUps++;
+                    continue;
+                }
+
                 if (NextFloat() >= CoinChanceOnClearBand) continue;
 
-                pattern[band] = NextFloat() < PowerUpChanceInsteadOfCoin
-                    ? BandContent.PowerUp
-                    : BandContent.Coin;
+                if (NextFloat() < PowerUpChanceInsteadOfCoin)
+                {
+                    pattern[band] = BandContent.PowerUp;
+                    placedPowerUp = true;
+                }
+                else
+                {
+                    pattern[band] = BandContent.Coin;
+                }
             }
         }
 

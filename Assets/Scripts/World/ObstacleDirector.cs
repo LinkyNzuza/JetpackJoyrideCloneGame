@@ -116,6 +116,23 @@ namespace Game.World
             new CoinTier("Gold", 25, 0.05f)
         };
 
+        [Header("Pickup rates")]
+        // These two live on PatternGenerator as plain properties and were never set from anywhere, so
+        // they sat at their defaults and could not be tuned without editing code. That is why nobody
+        // could find a power-up: the compound chance was four per cent of a clear band, roughly one
+        // every thirty-three seconds, in a game where a run lasted ten to twenty.
+        [Tooltip("Chance a band with no obstacle receives a pickup at all.")]
+        [SerializeField, Range(0f, 1f)] private float _coinChanceOnClearBand = 0.5f;
+
+        [Tooltip("Chance a pickup is a power-up rather than a coin.")]
+        [SerializeField, Range(0f, 1f)] private float _powerUpChance = 0.18f;
+
+        // A probability alone still lets an unlucky run go a very long way with nothing, and a player
+        // reads that as the feature being absent. This is the backstop: after this many metres without
+        // one, the next set is made to carry a power-up. Zero disables it.
+        [Tooltip("Metres without a power-up before one is guaranteed. Zero disables the guarantee.")]
+        [SerializeField, Range(0f, 500f)] private float _metresBetweenPowerUps = 100f;
+
         [Header("Power-up mix")]
         [Tooltip("Chance a power-up spawn is a magnet rather than a shield. Before this existed the " +
                  "world only ever tagged PowerUp_Shield, so the magnet never appeared at all.")]
@@ -136,6 +153,7 @@ namespace Game.World
         private float _distance;
         private float _speed;
         private float _metresSinceLastSet;
+        private float _metresSincePowerUp;
         private float _currentSpacing;
         private int _reportedTier = -1;
         private bool _reportedSpacingRaise;
@@ -237,7 +255,11 @@ namespace Game.World
         public void Rebuild()
         {
             _curve = PaceCurve.Default(_profile);
-            _generator = new PatternGenerator();
+            _generator = new PatternGenerator
+            {
+                CoinChanceOnClearBand = _coinChanceOnClearBand,
+                PowerUpChanceInsteadOfCoin = _powerUpChance
+            };
 
             if (_player != null)
             {
@@ -284,6 +306,7 @@ namespace Game.World
             _previousPattern = ObstaclePattern.Empty;
             _distance = 0f;
             _metresSinceLastSet = 0f;
+            _metresSincePowerUp = 0f;
             _reportedTier = -1;
             _reportedSpacingRaise = false;
             _frozen = false;
@@ -312,6 +335,7 @@ namespace Game.World
             _speed = _curve.SpeedAt(_distance);
             _distance += _speed * dt;
             _metresSinceLastSet += _speed * dt;
+            _metresSincePowerUp += _speed * dt;
 
             ReportTierChange();
 
@@ -368,20 +392,29 @@ namespace Game.World
 
         private void SpawnSet()
         {
+            bool force = _metresBetweenPowerUps > 0f && _metresSincePowerUp >= _metresBetweenPowerUps;
+
             ObstaclePattern pattern = _generator.Next(
-                _previousPattern, _reach, _geometry, _currentSpacing, _speed);
+                _previousPattern, _reach, _geometry, _currentSpacing, _speed, force);
 
             float spawnX = RightEdge() + _spawnAheadOfCamera;
+            bool spawnedPowerUp = false;
 
             for (int band = 0; band < ObstaclePattern.BandCount; band++)
             {
                 BandContent content = pattern[band];
                 if (content == BandContent.Empty) continue;
 
+                if (content == BandContent.PowerUp) spawnedPowerUp = true;
+
                 var position = new Vector3(spawnX, _geometry.CentreOf(band), 0f);
                 Transform spawned = CreateFor(content, position);
                 if (spawned != null) _live.Add(spawned);
             }
+
+            // Reset on what actually spawned rather than on what was requested, so a pattern that could
+            // not fit a power-up does not silently consume the guarantee.
+            if (spawnedPowerUp) _metresSincePowerUp = 0f;
 
             _previousPattern = pattern;
         }
