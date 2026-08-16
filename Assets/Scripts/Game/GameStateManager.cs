@@ -1,4 +1,4 @@
-﻿// UExtends Ako's  RunManager baseline into the full state + reset
+﻿// Extends Ako's  RunManager baseline into the full state + reset
 // orchestration layer described in sections 5 and 6 of the technical document.
 //
 // Single source of truth for whether gameplay is active (5.2, objective 1). No other system
@@ -43,6 +43,11 @@ namespace Game.Core
         [SerializeField] private GameOverUIController _gameOverUI;
         [SerializeField] private StartScreenController _startScreen;
 
+        [Header("Start Behaviour")]
+        [Tooltip("If true, the game waits at a Start screen for StartGame() (e.g. a button click). " +
+                "If false, the game skips straight into Playing on scene load — no Start screen needed.")]
+        [SerializeField] private bool _useStartScreen = false;
+
         [Header("Retry")]
         [Tooltip("Mirrors Ako's RunManager lockout: seconds after death before a keypress/tap is accepted as a retry, so the input that killed the player can't instantly retry it.")]
         [SerializeField, Range(0f, 3f)] private float _retryLockout = 0.4f;
@@ -73,6 +78,9 @@ namespace Game.Core
 
             if (_player == null)
                 Debug.LogError("[GameStateManager] No PlayerController found. Game Over cannot trigger.", this);
+
+            if (!_useStartScreen && _startScreen != null)
+                _startScreen.Hide();
         }
 
         private void OnEnable()
@@ -87,7 +95,12 @@ namespace Game.Core
 
         private void Start()
         {
-            EnterStart();
+            if (_useStartScreen)
+                EnterStart();
+            else
+                BeginPlaying(); // auto-start: no Start screen, input enabled immediately
+
+            //EnterStart();
         }
 
         private void Update()

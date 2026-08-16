@@ -16,6 +16,10 @@ namespace Game.Progression
         [SerializeField] private DistanceTracker _distanceTracker;
         [SerializeField] private PlayerController _player;
 
+        [Header("Diagnostics")]
+        [Tooltip("Logs every coin event and the resulting coin tally, to help debug wiring issues.")]
+        [SerializeField] private bool _logCoinEvents = false;
+
         [Header("Scoring")]
         [Tooltip("Points awarded per unit of coin value collected.")]
         [SerializeField, Range(1, 10)] private int _coinMultiplier = 1;
@@ -44,11 +48,19 @@ namespace Game.Progression
 
             if (_distanceTracker == null)
                 Debug.LogError("[ScoreManager] No DistanceTracker found. Score will read as coins only.", this);
+            if (_player == null)
+                Debug.LogError("[ScoreManager] No PlayerController found or wired. Coins will NEVER be added to score.", this);
         }
 
         private void OnEnable()
         {
-            if (_player != null) _player.OnCoinCollected += HandleCoinCollected;
+            //if (_player != null) _player.OnCoinCollected += HandleCoinCollected;
+            if (_player != null)
+            {
+                _player.OnCoinCollected += HandleCoinCollected;
+                if (_logCoinEvents)
+                    Debug.Log($"[ScoreManager] Subscribed to OnCoinCollected on '{_player.name}'.", this);
+            }
         }
 
         private void OnDisable()
@@ -60,8 +72,19 @@ namespace Game.Progression
         {
             // Ignore stray collection events after the run has already ended — a coin whose
             // trigger fires the same physics step as death must not sneak into a frozen score.
-            if (_isFrozen) return;
+            //if (_isFrozen) return;
+            // _coinScore += coinValue * _coinMultiplier;
+            if (_isFrozen)
+            {
+                if (_logCoinEvents)
+                    Debug.Log($"[ScoreManager] Coin worth {coinValue} ignored — score already frozen.", this);
+                return;
+            }
+
             _coinScore += coinValue * _coinMultiplier;
+
+            if (_logCoinEvents)
+                Debug.Log($"[ScoreManager] Coin collected (value {coinValue}). CoinScore is now {_coinScore}.", this);
         }
 
         /// <summary>Called by the Game State Manager as step 3 of the reset sequence.</summary>
