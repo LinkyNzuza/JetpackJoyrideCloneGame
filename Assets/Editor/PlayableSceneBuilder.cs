@@ -42,10 +42,61 @@ namespace Game.EditorTools
         private const string CoinFolder = "Assets/Art/Coins";
         private const string PowerUpFolder = "Assets/Art/PowerUps";
 
-        // Two saw frames, picked between per spawn so a long run is not visually identical. A saw is
-        // rotationally symmetric, which is why it reads correctly floating in mid-air where a spike
-        // would look wrong for having no surface to grow from.
-        private static readonly string[] ObstacleSprites = { "saw", "saw_move" };
+        /// <summary>One obstacle kind for the director's variant table.</summary>
+        private readonly struct ObstacleDef
+        {
+            public readonly string Name;
+            public readonly string Sprite;
+            public readonly Vector2 Scale;
+            public readonly float Weight;
+            public readonly ObstacleDirector.ColliderShape Shape;
+            public readonly float ColliderScale;
+            public readonly float Spin;
+
+            public ObstacleDef(string name, string sprite, Vector2 scale, float weight,
+                ObstacleDirector.ColliderShape shape, float colliderScale, float spin)
+            {
+                Name = name;
+                Sprite = sprite;
+                Scale = scale;
+                Weight = weight;
+                Shape = shape;
+                ColliderScale = colliderScale;
+                Spin = spin;
+            }
+        }
+
+        // Four visual kinds across six entries. Sizes are from measured pixel dimensions at 100 pixels
+        // per unit, and every one covers a useful share of the 2.67 m band, because a hazard the player
+        // can drift past is not an obstacle.
+        //
+        //   Saw          1.28 x 1.28   round, spins, unmistakably a threat
+        //   Zapper       0.22 x 1.73   the genre's signature hazard, a thin vertical beam
+        //   Spike up     0.77 x 1.31   spike_top points up, narrow end at the top of the image
+        //   Spike down   0.77 x 1.31   spike_bottom is its mirror
+        //
+        // The two saw frames differ only in artwork and spin, so they read as one kind with variation.
+        // The beams are scaled well past their authored size, which softens them - acceptable for a
+        // glowing beam and not for anything with an edge, which is why nothing else is stretched.
+        //
+        // Everything stays centred on its band. Anchoring a hazard to a band edge would leave the band
+        // centre clear, and the centre is exactly where PlayerReach models the player travelling, so
+        // the generator's promise that a blocked band cannot be passed would become false.
+        private static readonly ObstacleDef[] Obstacles =
+        {
+            new ObstacleDef("Saw",        "saw",           Vector2.one,             0.30f,
+                ObstacleDirector.ColliderShape.Circle, 0.90f,  200f),
+            new ObstacleDef("SawFast",    "saw_move",      Vector2.one,             0.15f,
+                ObstacleDirector.ColliderShape.Circle, 0.90f, -340f),
+            new ObstacleDef("Zapper",     "laserRed01",    new Vector2(2.4f, 3.2f), 0.25f,
+                ObstacleDirector.ColliderShape.Box,    0.90f,    0f),
+            new ObstacleDef("ZapperAlt",  "laserGreen02",  new Vector2(1.7f, 2.4f), 0.10f,
+                ObstacleDirector.ColliderShape.Box,    0.90f,    0f),
+            new ObstacleDef("SpikeUp",    "spike_top",     new Vector2(1.5f, 1.5f), 0.10f,
+                ObstacleDirector.ColliderShape.Box,    0.85f,    0f),
+            new ObstacleDef("SpikeDown",  "spike_bottom",  new Vector2(1.5f, 1.5f), 0.10f,
+                ObstacleDirector.ColliderShape.Box,    0.85f,    0f)
+        };
 
         // Matched to ObstacleDirector's coin tiers by name, so the values and weights stay owned there
         // and are not duplicated here.
@@ -229,13 +280,30 @@ namespace Game.EditorTools
         {
             var so = new SerializedObject(director);
 
-            SerializedProperty obstacles = so.FindProperty("_obstacleSprites");
+            SerializedProperty obstacles = so.FindProperty("_obstacleVariants");
             if (obstacles != null)
             {
-                obstacles.arraySize = ObstacleSprites.Length;
-                for (int i = 0; i < ObstacleSprites.Length; i++)
-                    obstacles.GetArrayElementAtIndex(i).objectReferenceValue =
-                        LoadSprite($"{HazardFolder}/{ObstacleSprites[i]}.png");
+                obstacles.arraySize = Obstacles.Length;
+
+                for (int i = 0; i < Obstacles.Length; i++)
+                {
+                    ObstacleDef def = Obstacles[i];
+                    SerializedProperty element = obstacles.GetArrayElementAtIndex(i);
+
+                    Sprite sprite = LoadSprite($"{HazardFolder}/{def.Sprite}.png");
+                    if (sprite == null)
+                        Debug.LogError(
+                            $"[PlayableSceneBuilder] Could not load {def.Sprite}.png, so the " +
+                            $"'{def.Name}' obstacle will spawn as a flat rectangle.");
+
+                    element.FindPropertyRelative("Name").stringValue = def.Name;
+                    element.FindPropertyRelative("Sprite").objectReferenceValue = sprite;
+                    element.FindPropertyRelative("Scale").vector2Value = def.Scale;
+                    element.FindPropertyRelative("Weight").floatValue = def.Weight;
+                    element.FindPropertyRelative("Collider").enumValueIndex = (int)def.Shape;
+                    element.FindPropertyRelative("ColliderScale").floatValue = def.ColliderScale;
+                    element.FindPropertyRelative("SpinDegreesPerSecond").floatValue = def.Spin;
+                }
             }
 
             SerializedProperty shield = so.FindProperty("_shieldSprite");

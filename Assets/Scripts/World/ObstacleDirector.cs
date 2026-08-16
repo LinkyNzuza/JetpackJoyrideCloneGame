@@ -35,6 +35,64 @@ namespace Game.World
         /// PlayerCollision clamps to.
         /// </para>
         /// </summary>
+        /// <summary>Which collider shape an obstacle variant gets.</summary>
+        public enum ColliderShape
+        {
+            /// <summary>Circle when the scaled sprite is roughly square, box otherwise.</summary>
+            Auto = 0,
+            Circle = 1,
+            Box = 2
+        }
+
+        /// <summary>
+        /// One kind of obstacle: its sprite, how it is sized, how it collides and whether it turns.
+        /// <para>
+        /// Every variant stays centred on its band rather than anchored to a band edge, and that is a
+        /// gameplay requirement rather than a convenience. PatternGenerator guarantees that a blocked
+        /// band cannot be passed, and PlayerReach models the player travelling between band centres. A
+        /// hazard parked at a band's edge would leave the centre clear, so the player would sail
+        /// through a band the generator had already counted as blocked, and the reachability promise
+        /// the whole difficulty model rests on would be quietly false.
+        /// </para>
+        /// <para>
+        /// For the same reason each variant is scaled to cover a useful share of the 2.67 m band. A
+        /// hazard the player can drift past is not an obstacle.
+        /// </para>
+        /// </summary>
+        [Serializable]
+        public sealed class ObstacleVariant
+        {
+            public string Name;
+            public Sprite Sprite;
+
+            [Tooltip("Local scale. Non-uniform is allowed; the collider follows.")]
+            public Vector2 Scale = Vector2.one;
+
+            [Tooltip("Relative chance. Weights are normalised, so they need not sum to 1.")]
+            [Range(0f, 1f)] public float Weight = 1f;
+
+            public ColliderShape Collider = ColliderShape.Auto;
+
+            [Tooltip("Shrinks the collider against the sprite. Below 1 so a near miss stays a miss " +
+                     "rather than dying on transparent corners.")]
+            [Range(0.1f, 1.5f)] public float ColliderScale = 0.9f;
+
+            [Tooltip("Degrees per second about Z. Zero adds no spin component at all.")]
+            public float SpinDegreesPerSecond;
+
+            public ObstacleVariant(
+                string name, Vector2 scale, float weight, ColliderShape collider,
+                float colliderScale, float spin)
+            {
+                Name = name;
+                Scale = scale;
+                Weight = weight;
+                Collider = collider;
+                ColliderScale = colliderScale;
+                SpinDegreesPerSecond = spin;
+            }
+        }
+
         [Serializable]
         public sealed class CoinTier
         {
@@ -91,9 +149,9 @@ namespace Game.World
         [SerializeField] private GameObject _powerUpPrefab;
 
         [Header("Sprites (used when no prefab is set)")]
-        [Tooltip("Obstacle sprites. One is chosen at random per spawn, so a run is not visually " +
-                 "identical. Empty falls back to a flat red rectangle.")]
-        [SerializeField] private Sprite[] _obstacleSprites;
+        [Tooltip("Obstacle kinds. One is chosen per spawn by weight. Empty falls back to a flat red " +
+                 "rectangle.")]
+        [SerializeField] private ObstacleVariant[] _obstacleVariants;
 
         [Tooltip("Shield power-up sprite. Empty falls back to a flat blue square.")]
         [SerializeField] private Sprite _shieldSprite;
@@ -472,7 +530,8 @@ namespace Game.World
         // picked per spawn, so a long run is not visually identical.
         private Transform BuildObstacle(Vector3 position)
         {
-            Sprite sprite = PickObstacleSprite();
+            ObstacleVariant variant = PickObstacleVariant();
+            Sprite sprite = variant != null ? variant.Sprite : null;
 
             // Solid, not a trigger, as specified. Worth knowing: a shielded player survives the hit
             // but the obstacle is not released, because PlayerCollision only releases coins and
@@ -480,9 +539,22 @@ namespace Game.World
             // translating while PlayerController re-locks X and clamps Y every FixedUpdate, so expect
             // jitter on a shielded hit. Making obstacles triggers, or releasing an absorbed obstacle,
             // would both fix it; both are decisions for whoever owns collision.
-            return Build("Obstacle", position, sprite, Color.white,
+            Transform built = Build("Obstacle", position, sprite, Color.white,
                 new Color(0.85f, 0.2f, 0.2f), new Vector2(0.8f, 1.6f),
-                ref _obstacleSprite, trigger: false, colliderScale: 0.9f, value: 0);
+                ref _obstacleSprite, trigger: false,
+                colliderScale: variant != null ? variant.ColliderScale : 0.9f,
+                value: 0,
+                spriteScale: variant != null ? variant.Scale : Vector2.one,
+                shape: variant != null ? variant.Collider : ColliderShape.Auto);
+
+            if (built != null && variant != null && variant.SpinDegreesPerSecond != 0f)
+            {
+                WorldSpin spin = built.gameObject.AddComponent<WorldSpin>();
+                spin.SetRate(variant.SpinDegreesPerSecond);
+                spin.SetDirector(this);
+            }
+
+            return built;
         }
 
         private Transform BuildCoin(Vector3 position)
@@ -518,14 +590,29 @@ namespace Game.World
                 ref _powerUpSprite, trigger: true, colliderScale: 1f, value: 0);
         }
 
-        private Sprite PickObstacleSprite()
+        private ObstacleVariant PickObstacleVariant()
         {
-            if (_obstacleSprites == null || _obstacleSprites.Length == 0) return null;
+            if (_obstacleVariants == null || _obstacleVariants.Length == 0) return null;
 
-            // Random.Next rather than UnityEngine.Random, matching PatternGenerator, so a seeded run
-            // stays reproducible.
-            int index = _visualRandom.Next(_obstacleSprites.Length);
-            return _obstacleSprites[index];
+            float total = 0f;
+            for (int i = 0; i < _obstacleVariants.Length; i++)
+                if (_obstacleVariants[i] != null) total += Mathf.Max(0f, _obstacleVariants[i].Weight);
+
+            if (total <= 0f) return _obstacleVariants[0];
+
+            // Weighted from the same System.Random stream as the layout, so a seeded run reproduces its
+            // appearance as well as its shape.
+            float roll = NextFloat() * total;
+            for (int i = 0; i < _obstacleVariants.Length; i++)
+            {
+                ObstacleVariant variant = _obstacleVariants[i];
+                if (variant == null) continue;
+
+                roll -= Mathf.Max(0f, variant.Weight);
+                if (roll <= 0f) return variant;
+            }
+
+            return _obstacleVariants[_obstacleVariants.Length - 1];
         }
 
         private CoinTier PickCoinTier()
@@ -573,9 +660,12 @@ namespace Game.World
             ref Sprite cachedFallback,
             bool trigger,
             float colliderScale,
-            int value)
+            int value,
+            Vector2 spriteScale = default,
+            ColliderShape shape = ColliderShape.Auto)
         {
             bool usingFallback = sprite == null;
+            if (spriteScale == default) spriteScale = Vector2.one;
 
             if (usingFallback)
             {
@@ -586,17 +676,18 @@ namespace Game.World
             var go = new GameObject($"World_{tagName}");
             go.transform.position = position;
 
-            // Scale only ever shapes the generated rectangle. Real sprites are used at their authored
-            // size, so nothing is resampled and the art stays as crisp as it was drawn.
+            // The generated rectangle is shaped entirely by scale. A real sprite is used at its authored
+            // size unless a variant asks otherwise, and coins and power-ups never do, so those are never
+            // resampled.
             go.transform.localScale = usingFallback
                 ? new Vector3(fallbackSize.x, fallbackSize.y, 1f)
-                : Vector3.one;
+                : new Vector3(spriteScale.x, spriteScale.y, 1f);
 
             var renderer = go.AddComponent<SpriteRenderer>();
             renderer.sprite = sprite;
             renderer.color = usingFallback ? fallbackColour : tint;
 
-            AddCollider(go, sprite, usingFallback, trigger, colliderScale);
+            AddCollider(go, sprite, usingFallback, trigger, colliderScale, spriteScale, shape);
 
             if (value > 0) go.AddComponent<WorldCoin>().SetValue(value);
 
@@ -608,7 +699,8 @@ namespace Game.World
         }
 
         private static void AddCollider(
-            GameObject go, Sprite sprite, bool usingFallback, bool trigger, float colliderScale)
+            GameObject go, Sprite sprite, bool usingFallback, bool trigger, float colliderScale,
+            Vector2 spriteScale, ColliderShape shape)
         {
             // The generated rectangle is shaped by localScale, so a unit box is already the right size.
             if (usingFallback)
@@ -618,10 +710,22 @@ namespace Game.World
                 return;
             }
 
+            // Collider sizes are in local space, so the transform's scale applies on top. That means the
+            // unscaled sprite size is the right input, and a non-uniform scale still produces a collider
+            // that matches what is drawn.
             Vector2 size = sprite.bounds.size;
-            bool roughlySquare = Mathf.Abs(size.x - size.y) <= Mathf.Max(size.x, size.y) * 0.2f;
 
-            if (roughlySquare)
+            // A CircleCollider2D under a non-uniform scale cannot follow the sprite, since a circle has
+            // one radius and the two axes disagree. Rather than silently producing a hitbox that does not
+            // match the art, that case becomes a box.
+            bool uniformScale = Mathf.Abs(spriteScale.x - spriteScale.y) < 0.001f;
+            Vector2 scaled = new Vector2(size.x * spriteScale.x, size.y * spriteScale.y);
+            bool roughlySquare = Mathf.Abs(scaled.x - scaled.y) <= Mathf.Max(scaled.x, scaled.y) * 0.2f;
+
+            bool useCircle = shape == ColliderShape.Circle
+                             || (shape == ColliderShape.Auto && roughlySquare && uniformScale);
+
+            if (useCircle && uniformScale)
             {
                 var circle = go.AddComponent<CircleCollider2D>();
                 circle.radius = Mathf.Min(size.x, size.y) * 0.5f * colliderScale;
