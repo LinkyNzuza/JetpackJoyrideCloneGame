@@ -1,0 +1,11 @@
+art metas total = 166
+art pngs total   = 156
+jetpack metas    = 8
+--- did Unity build Assembly-CSharp recently? ---
+Assembly-CSharp.dll modified: 08/12/2026 14:40:07
+PlayerJetpackFlame.cs modified: 08/12/2026 14:33:03
+Player.prefab modified:         08/12/2026 14:33:48
+--- flame child present in prefab? ---
+  m_Children:
+  m_Name: JetpackFlame
+  m_Children: []
