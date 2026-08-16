@@ -173,6 +173,12 @@ namespace Game.Player
 
             _rb.gravityScale = _gravityScale;
 
+            // The character is side-on and must stay upright: there is no pose in this game that wants
+            // a rotated body. Thrust is applied at the centre of mass so it generates no torque, which
+            // is why free rotation went unnoticed until the world started spawning solid obstacles that
+            // are translated by transform and spin. Both of those produce off-centre impulses.
+            _rb.freezeRotation = true;
+
             ResolveThrustAction();
 
             _inputEnabled = true;
@@ -234,6 +240,10 @@ namespace Game.Player
             // Re-apply gravity scale so Inspector tuning during Play Mode takes effect.
             _rb.gravityScale = _gravityScale;
 
+            // Re-asserted every tick for the same reason: an invariant this cheap should not depend on
+            // nobody having unticked it in the Inspector or on a scene instance overriding the prefab.
+            _rb.freezeRotation = true;
+
             // Sample input at top of tick; gated by _inputEnabled (forced false when dead/reset).
             bool deviceHeld = _thrustAction?.IsPressed() ?? false;
             bool pressedThisTick = _pressedSinceLastTick;
@@ -289,6 +299,18 @@ namespace Game.Player
                 vel = _rb.linearVelocity;
                 vel.x = 0f;
                 _rb.linearVelocity = vel;
+            }
+
+            // ── Step 5: Lock rotation upright — same class of invariant as the X-lock ────
+            // freezeRotation above stops new torque accumulating, but it does not undo a rotation the
+            // body already has. Any angle that got in before the freeze, or from a scene instance whose
+            // transform was rotated by hand, would otherwise persist for the rest of the session and
+            // survive ResetRun. Snapping here is what makes the guarantee hold rather than merely start.
+            {
+                if (_rb.angularVelocity != 0f) _rb.angularVelocity = 0f;
+
+                if (transform.rotation != Quaternion.identity)
+                    transform.rotation = Quaternion.identity;
             }
 
             // ── Power-up timer tick — alive only ──────────────────────────────────────
@@ -377,6 +399,12 @@ namespace Game.Player
             _isAlive = false;
             DisableInput();
             _rb.linearVelocity = Vector2.zero;
+
+            // Angular velocity too. Zeroing only the linear part left a corpse still turning, and
+            // because rb.simulated goes false on the next line that spin was frozen into the body and
+            // came back the moment ResetRun re-enabled simulation.
+            _rb.angularVelocity = 0f;
+
             _rb.simulated = false;
             return true;
         }
@@ -420,10 +448,15 @@ namespace Game.Player
             for (int i = 0; i < _powerUpActive.Length; i++)
                 wasActive[i] = _powerUpActive[i];
 
-            // Restore physics state.
+            // Restore physics state. Rotation is part of that: a run must not inherit the angle the
+            // previous one ended at, which is how a single bad contact turned into a player that
+            // appeared to spin permanently.
             _rb.simulated = true;
             _rb.linearVelocity = Vector2.zero;
+            _rb.angularVelocity = 0f;
+            _rb.freezeRotation = true;
             transform.position = new Vector3(_fixedX, _spawnY, transform.position.z);
+            transform.rotation = Quaternion.identity;
 
             // Restore logic state.
             _isAlive = true;
