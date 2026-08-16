@@ -13,6 +13,7 @@
 // make a sound.
 
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace Game.Player
@@ -75,6 +76,19 @@ namespace Game.Player
         [Tooltip("Random pitch spread on one-shots, so a run of coins does not sound mechanical.")]
         [SerializeField, Range(0f, 0.5f)] private float _pitchVariation = 0.05f;
 
+        // Tuning: the shortest gap allowed between two plays of the SAME clip. This exists because the
+        // magnet works now. It drags a whole band of coins into contact within a few frames, and each
+        // one raised OnCoinCollected, so ten copies of the coin sound started on one source inside a
+        // fifth of a second. Ten overlapping copies at the same volume do not sound ten times better;
+        // they sum past full scale and arrive as a click. Zero disables the guard.
+        [Tooltip("Shortest gap between two plays of the same clip. Stops a magnet turning a band of " +
+                 "coins into one clipped burst.")]
+        [SerializeField, Range(0f, 0.5f)] private float _repeatGuard = 0.06f;
+
+        // When each clip was last played, for the repeat guard. Keyed by clip so collapsing repeats of
+        // one sound never suppresses a different one.
+        private readonly Dictionary<AudioClip, float> _lastPlayed = new Dictionary<AudioClip, float>();
+
         // Stable delegates so subscribe and unsubscribe act on the same instances.
         private Action _onDeath;
         private Action<int> _onCoin;
@@ -92,9 +106,15 @@ namespace Game.Player
                 return;
             }
 
-            _effectSource = EnsureSource(_effectSource, loop: false, volume: _effectVolume);
+            // The one-shot source sits at full volume and _effectVolume is applied per play instead.
+            // It used to be set on both, and PlayOneShot multiplies its scale by the source volume, so
+            // a serialized 0.8 was actually coming out at 0.64. The number in the Inspector now means
+            // what it says.
+            _effectSource = EnsureSource(_effectSource, loop: false, volume: 1f);
             _jetpackSource = EnsureSource(_jetpackSource, loop: true, volume: 0f);
             _magnetSource = EnsureSource(_magnetSource, loop: true, volume: 0f);
+
+            PreloadClips();
 
             _onDeath = HandleDeath;
             _onCoin = HandleCoin;
@@ -155,6 +175,18 @@ namespace Game.Player
 
         private void HandleDeath()
         {
+            // Death takes the source. Dying expires every active power-up first, and each expiry raises
+            // its own event, so a player who dies holding a shield and a magnet had two copies of the
+            // power-down sound already playing before the death sound started. Three overlapping cues
+            // for one moment reads as noise rather than as an event. Clearing the source first means
+            // death is heard cleanly, which matters because it is the one moment the player has to
+            // understand.
+            if (_effectSource != null) _effectSource.Stop();
+
+            // Cleared so the guard cannot suppress the death sound because something else played it
+            // moments ago, and so the next run starts with no history.
+            _lastPlayed.Clear();
+
             PlayOnce(_death);
 
             // Cut both loops immediately on death. Fading them would leave the jetpack audible over a
@@ -196,11 +228,48 @@ namespace Game.Player
         {
             if (clip == null || _effectSource == null) return;
 
+            // Per clip rather than global, so a coin arriving in the same frame as a shield break does
+            // not silence either of them. Only repeats of the same sound are collapsed.
+            if (_repeatGuard > 0f)
+            {
+                float now = Time.unscaledTime;
+                if (_lastPlayed.TryGetValue(clip, out float previous) && now - previous < _repeatGuard)
+                    return;
+
+                _lastPlayed[clip] = now;
+            }
+
             _effectSource.pitch = _pitchVariation <= 0f
                 ? 1f
                 : 1f + UnityEngine.Random.Range(-_pitchVariation, _pitchVariation);
 
             _effectSource.PlayOneShot(clip, _effectVolume);
+        }
+
+        /// <summary>
+        /// Forces the assigned clips to load now rather than on first play.
+        /// <para>
+        /// These import with preloadAudioData off, so the data is fetched the first time a clip is
+        /// asked for. For a short one-shot that means the first coin of a session, the first shield
+        /// break and the first death can be swallowed or arrive late, which reads as the audio being
+        /// unreliable rather than as a loading detail. Doing it here rather than by rewriting the
+        /// import settings on forty-one files keeps the change in one place and touches no assets.
+        /// </para>
+        /// </summary>
+        private void PreloadClips()
+        {
+            AudioClip[] clips =
+            {
+                _jetpackLoop, _magnetLoop, _coin, _powerUpActivated,
+                _powerUpExpired, _death, _shieldBreak, _runStart
+            };
+
+            for (int i = 0; i < clips.Length; i++)
+            {
+                AudioClip clip = clips[i];
+                if (clip == null) continue;
+                if (clip.loadState == AudioDataLoadState.Unloaded) clip.LoadAudioData();
+            }
         }
 
         private static void StopLoop(AudioSource source)
