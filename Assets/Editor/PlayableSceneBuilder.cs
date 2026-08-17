@@ -230,6 +230,7 @@ namespace Game.EditorTools
                 "  condition   RunConfig, keys 1/2/3 pick Constant/Progressive/Aggressive\n" +
                 "  data        RunLog writes one CSV row per run to the persistent data path\n" +
                 "  overlay     RunTestOverlay shows the active condition; delete it for the real HUD\n" +
+                "  prompts     ControlPrompt: hold to fly until first thrust, then R to restart\n" +
                 $"  background  {Layers.Length} parallax layers\n" +
                 "  NOT added to EditorBuildSettings, by design. Add it yourself when you want it built.");
         }
@@ -382,6 +383,10 @@ namespace Game.EditorTools
             SetReference(overlay, "_config", config);
             SetReference(overlay, "_log", log);
             SetReference(overlay, "_director", director);
+
+            ControlPrompt prompt = go.AddComponent<ControlPrompt>();
+            SetReference(prompt, "_run", run);
+            SetReference(prompt, "_player", player.GetComponent<PlayerController>());
 
             return run;
         }

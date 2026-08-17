@@ -235,26 +235,24 @@ namespace Game.Run
         }
 
         /// <summary>
-        /// True on the frame any key goes down. Uses the press edge rather than the held state, so a
+        /// True on the frame a retry is asked for. Uses the press edge rather than the held state, so a
         /// player who died with thrust held does not retry the instant the lockout expires; they have
         /// to actually press something.
+        /// <para>
+        /// R specifically, rather than any key. An advertised control should be the one that works: the
+        /// prompt says R, so R is what this listens for. Pointer and touch are kept so a device with no
+        /// keyboard can still restart.
+        /// </para>
+        /// <para>
+        /// This also removed a hack. While retry accepted any key, the three condition keys had to be
+        /// excluded here or they would both pick a condition and immediately consume it on the same
+        /// press. Listening for one key means that exclusion is no longer needed.
+        /// </para>
         /// </summary>
         private static bool RetryRequested()
         {
             Keyboard keyboard = Keyboard.current;
-            if (keyboard != null)
-            {
-                // The condition keys are excluded, because retry accepts any key and those three would
-                // otherwise both pick a condition and immediately consume it on the same press. Checked
-                // here rather than by asking RunConfig, so it cannot depend on which component's Update
-                // happens to run first.
-                if (keyboard.digit1Key.wasPressedThisFrame
-                    || keyboard.digit2Key.wasPressedThisFrame
-                    || keyboard.digit3Key.wasPressedThisFrame)
-                    return false;
-
-                if (keyboard.anyKey.wasPressedThisFrame) return true;
-            }
+            if (keyboard != null && keyboard.rKey.wasPressedThisFrame) return true;
 
             Mouse mouse = Mouse.current;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame) return true;
