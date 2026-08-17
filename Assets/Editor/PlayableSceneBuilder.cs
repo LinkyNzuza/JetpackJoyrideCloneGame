@@ -37,7 +37,8 @@ namespace Game.EditorTools
     {
         private const string ScenePath = "Assets/Scenes/Playable.unity";
         private const string PlayerPrefabPath = "Assets/Prefabs/Player.prefab";
-        private const string BackgroundFolder = "Assets/Art/Backgrounds";
+        /// <summary>Linky's backdrop, brought across from her branch with its original guid.</summary>
+        private const string BackdropAsset = "Assets/Sprites/BackdropMain.png";
         private const string HazardFolder = "Assets/Art/Hazards";
         private const string CoinFolder = "Assets/Art/Coins";
         private const string PowerUpFolder = "Assets/Art/PowerUps";
@@ -122,67 +123,55 @@ namespace Game.EditorTools
         private const float CameraSize = 5f;
         private const float CameraZ = -10f;
 
-        /// <summary>One parallax plane: which sprite, how fast, how high, and how far back.</summary>
+        /// <summary>One background plane: which sprite, at what scale, how fast, how high, how far back.</summary>
         private struct LayerDef
         {
             public string Name;
-            public string Sprite;
+            public string AssetPath;
+            public Vector2 Scale;
             public float Parallax;
             public float Y;
             public int SortingOrder;
 
-            public LayerDef(string name, string sprite, float parallax, float y, int sortingOrder)
+            public LayerDef(
+                string name, string assetPath, Vector2 scale, float parallax, float y, int sortingOrder)
             {
                 Name = name;
-                Sprite = sprite;
+                AssetPath = assetPath;
+                Scale = scale;
                 Parallax = parallax;
                 Y = y;
                 SortingOrder = sortingOrder;
             }
         }
 
-        // Parallax rises towards the front. The sky barely drifts, the ground almost keeps pace with
-        // the obstacles. All sorting orders are below the flame at -2, so nothing here can draw over
-        // the player.
+        // The background is Linky's. One backdrop, BackdropMain, tiled across the frame: a single
+        // layer, no parallax stack.
         //
-        // Every Y below is derived from the sprite's measured height and the play bounds, not chosen
-        // by eye. All these sprites are centre-pivot at 100 pixels per unit with no transparent
-        // padding, so the transform Y is the sprite's centre and half its height reaches each edge.
+        // The scale is hers too, and it is worth recording why it is not rounded. Her scene sets the
+        // pieces to 2.32 x 2.78. The frame at orthographic size 5 is 10.000 units tall and, at 16:9,
+        // 17.7778 wide; the sprite is 768 x 360 px at 100 pixels per unit, so 7.68 x 3.60 units. Fill
+        // the frame and you get 17.7778 / 7.68 = 2.3148 across and 10.000 / 3.60 = 2.7778 up. Her
+        // hand-set values are those two numbers to two decimals. The composition is demonstrably hers
+        // and demonstrably deliberate, so her figures are used verbatim rather than replaced with the
+        // exact quotients: the extra 0.005 on X is 0.04 units of overscan that guarantees no hairline
+        // seam between tiles, which the exact value would risk.
         //
-        // GROUND. groundLayer2 is 1024x200, so 2.00 units tall, half-height 1.00. The player's play
-        // bounds are -4 to +4 and they can pin against -4, so the ground's top edge belongs on that
-        // line rather than floating above it: centre = -4.00 - 1.00 = -5.00. Top edge -4.00, bottom
-        // edge -6.00. The screen bottom is -5.00, so exactly 1.00 unit of it is visible, a tenth of
-        // the ten-unit view. Its grass tufts occupy the first 40 rows, -4.00 down to -4.40, and a
-        // player pinned at the floor has its sprite bottom at -4.55 and draws at order 0 in front of
-        // this at -70, so its legs overlap the tufts and it reads as skimming the surface.
+        // The scale is non-uniform, so the image is stretched - native aspect 2.133 shown at 1.780.
+        // That is her design decision, the consequence of filling a 16:9 frame with a 2.13:1 image,
+        // and it is preserved rather than corrected.
         //
-        // The previous table used groundLayer1 at -3.4. That is 1024x400, so it spanned -5.4 to -1.4:
-        // 3.6 visible units, over a third of the screen, with its top edge reaching towards the
-        // middle. That is what read as flying over a lake.
+        // Parallax 1.0 because a single plane has no depth to express. In her scene the backdrop was
+        // static in world space and the camera travelled over it, so its apparent speed equalled the
+        // player's. Here the player holds station and the world scrolls at that same speed, so 1.0
+        // reproduces the motion her setup produced.
         //
-        // SKY. backgroundEmpty rather than backgroundColorGrass. The latter has a hard green horizon
-        // baked in at row 638, only 1.26 units below its own centre, so putting that horizon on the
-        // mechanical floor forces its centre to -2.74 and leaves the top 2.6 units of screen blank.
-        // backgroundEmpty is the same palette as a clean gradient with no baked horizon, which lets
-        // the silhouette layers supply all the terrain.
+        // Sorting -100, behind the flame at -2. Y 0, matching her world placement of -0.009.
         //
-        // HAZE, not clouds. Every cloud sprite in this set is a band of cloud over a solid fill
-        // occupying its lower 60% - cloudLayer1/2 are opaque from row 160, cloudLayerB1/B2 from row
-        // 140. They are horizon haze banks, not floating clouds. Placed high, cloudLayerB2 drops a
-        // 2.6-unit pale slab across the upper screen with a hard edge; placed so the slab clears the
-        // top edge, the clouds themselves end up off-screen. So it is used as the haze it was drawn
-        // to be, which is also what makes the mountains behind it read as distant. High clouds would
-        // need new art or a crop.
-        //
-        // Note these layers are pale blue and near-white atmospheric silhouettes, not green terrain.
-        // The result is hazy depth rather than a landscape, which is what the art supports.
+        // The Kenney background files remain on disk and are simply not referenced.
         private static readonly LayerDef[] Layers =
         {
-            new LayerDef("Sky",       "backgroundEmpty", 0.05f,  0.00f, -100),
-            new LayerDef("Haze",      "cloudLayerB2",    0.20f, -3.00f,  -90),
-            new LayerDef("Mountains", "mountains",       0.45f, -3.20f,  -80),
-            new LayerDef("Ground",    "groundLayer2",    0.80f, -5.00f,  -70)
+            new LayerDef("Backdrop", BackdropAsset, new Vector2(2.32f, 2.78f), 1.00f, 0f, -100)
         };
 
         [MenuItem("Tools/Jetpack/Build playable scene")]
@@ -231,7 +220,7 @@ namespace Game.EditorTools
                 "  data        RunLog writes one CSV row per run to the persistent data path\n" +
                 "  overlay     RunTestOverlay present but HIDDEN, for participant builds\n" +
                 "  prompts     ControlPrompt: hold to fly until first thrust, then R to restart\n" +
-                $"  background  {Layers.Length} parallax layers\n" +
+                $"  background  Linky's BackdropMain, tiled across the frame\n" +
                 "  NOT added to EditorBuildSettings, by design. Add it yourself when you want it built.");
         }
 
@@ -406,11 +395,11 @@ namespace Game.EditorTools
 
             foreach (LayerDef def in Layers)
             {
-                Sprite sprite = LoadSprite($"{BackgroundFolder}/{def.Sprite}.png");
+                Sprite sprite = LoadSprite(def.AssetPath);
                 if (sprite == null)
                 {
                     Debug.LogError(
-                        $"[PlayableSceneBuilder] Could not load a sprite from {def.Sprite}.png, so the " +
+                        $"[PlayableSceneBuilder] Could not load a sprite from {def.AssetPath}, so the " +
                         $"'{def.Name}' layer is missing. The scene is still playable without it.");
                     continue;
                 }
@@ -418,10 +407,15 @@ namespace Game.EditorTools
                 var layerRoot = new GameObject(def.Name);
                 layerRoot.transform.SetParent(root.transform, false);
 
-                float width = sprite.bounds.size.x;
+                // Spacing and count both use the SCALED width. sprite.bounds is the unscaled size, so
+                // using it directly would tile the pieces at 7.68 units while each one draws 17.82
+                // wide, overlapping them almost completely. BackgroundScroller measures from
+                // renderer.bounds at runtime, which is already in world space, so the two agree.
+                float width = sprite.bounds.size.x * def.Scale.x;
 
                 // Enough pieces to cover the view plus one spare, so there is always a piece waiting
-                // off-screen to the right and the chain never shows a gap mid-wrap.
+                // off-screen to the right and the chain never shows a gap mid-wrap. For this backdrop
+                // that resolves to three, which is exactly how many Linky used.
                 int count = Mathf.Max(3, Mathf.CeilToInt(CameraSize * 2f * (16f / 9f) / width) + 1);
 
                 var pieces = new List<Transform>(count);
@@ -429,6 +423,7 @@ namespace Game.EditorTools
                 {
                     var piece = new GameObject($"{def.Name}_{i}");
                     piece.transform.SetParent(layerRoot.transform, false);
+                    piece.transform.localScale = new Vector3(def.Scale.x, def.Scale.y, 1f);
                     piece.transform.position = new Vector3((i - 1) * width, def.Y, 0f);
 
                     SpriteRenderer renderer = piece.AddComponent<SpriteRenderer>();

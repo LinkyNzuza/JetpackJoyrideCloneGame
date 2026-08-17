@@ -169,3 +169,17 @@ Packages/packages-lock.json linguist-generated
 
 # Exceptions for .asset files such as lightning pre-baking
 LightingData.asset     binary
+
+# --- LFS exception: do not remove ---
+#
+# BackdropMain.png is deliberately kept OUT of Git LFS, even though *.png above puts every other
+# image in it. It originates on Linky's-Branch-, whose .gitattributes has no LFS rule for images, so
+# it is stored there as plain bytes. If it were an LFS pointer here and binary there, one path would
+# hold two different blobs and every merge between the branches would conflict on it.
+#
+# Git attributes are last-match-wins, so this line must stay BELOW *.png to have any effect.
+# -filter -diff -merge unsets the lfs macro for this one path; -text keeps it binary so no line
+# ending conversion is attempted on it.
+#
+# Remove this only when both branches agree on how images are stored.
+Assets/Sprites/BackdropMain.png    -filter -diff -merge -text
