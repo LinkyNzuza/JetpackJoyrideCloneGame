@@ -28,16 +28,7 @@ public class LaserBehaviour : MonoBehaviour
 
     // Only fires while hitbox.enabled is true (the "active" phase), so touching the
     // laser during its harmless warning phase never costs a life.
-    private void OnTriggerEnter2D(Collider2D other)
-    {
-        if (!other.CompareTag("Player")) return;
-
-        PlayerHealth health = other.GetComponent<PlayerHealth>();
-        if (health != null)
-        {
-            health.TakeDamage(1);
-        }
-    }
+   
 
     private IEnumerator Sequence(float telegraphTime, float activeTime)
     {

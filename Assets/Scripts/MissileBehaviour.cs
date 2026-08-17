@@ -24,16 +24,5 @@ public class MissileBehaviour : MonoBehaviour
         transform.position += Vector3.left * speed * Time.deltaTime;
     }
 
-    private void OnTriggerEnter2D(Collider2D other)
-    {
-        if (!other.CompareTag("Player")) return;
-
-        PlayerHealth health = other.GetComponent<PlayerHealth>();
-        if (health != null)
-        {
-            health.TakeDamage(1);
-        }
-
-        Destroy(gameObject);
-    }
+    
 }
