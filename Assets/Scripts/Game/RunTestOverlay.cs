@@ -31,8 +31,16 @@ namespace Game.Run
         [SerializeField] private ObstacleDirector _director;
 
         [Header("Display")]
-        [Tooltip("Draw the overlay. Turn off for an unsupervised playtest.")]
-        [SerializeField] private bool _visible = true;
+        // Off by default, because the default case is now a build going to a participant. A tester who
+        // can read their condition off the screen starts reasoning about it, and a participant who knows
+        // they are on "Aggressive" is no longer reacting to the difficulty, they are reacting to the
+        // label. Switch it on for your own setup pass, then off again before anyone else plays.
+        //
+        // Nothing is lost by hiding it. The condition is still written to the console when it changes and
+        // when a run ends, and every row of the CSV stamps the profile that run was actually played
+        // under, so the data can be grouped afterwards without anyone having watched a readout.
+        [Tooltip("Draw the overlay. Leave off for a build that goes to a participant.")]
+        [SerializeField] private bool _visible = false;
 
         [SerializeField] private int _fontSize = 14;
 

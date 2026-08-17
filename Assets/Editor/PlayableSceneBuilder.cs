@@ -229,7 +229,7 @@ namespace Game.EditorTools
                 $"  run         {run.GetType().Name}, freeze on death and keypress to retry\n" +
                 "  condition   RunConfig, keys 1/2/3 pick Constant/Progressive/Aggressive\n" +
                 "  data        RunLog writes one CSV row per run to the persistent data path\n" +
-                "  overlay     RunTestOverlay shows the active condition; delete it for the real HUD\n" +
+                "  overlay     RunTestOverlay present but HIDDEN, for participant builds\n" +
                 "  prompts     ControlPrompt: hold to fly until first thrust, then R to restart\n" +
                 $"  background  {Layers.Length} parallax layers\n" +
                 "  NOT added to EditorBuildSettings, by design. Add it yourself when you want it built.");
@@ -378,11 +378,15 @@ namespace Game.EditorTools
             SetReference(run, "_config", config);
             SetReference(run, "_log", log);
 
+            // Added but hidden. Kept in the scene so a supervisor can tick it on to confirm the
+            // condition during a setup pass, and set false explicitly here rather than relying on the
+            // field default, so the scene states the intent instead of inheriting it.
             RunTestOverlay overlay = go.AddComponent<RunTestOverlay>();
             SetReference(overlay, "_run", run);
             SetReference(overlay, "_config", config);
             SetReference(overlay, "_log", log);
             SetReference(overlay, "_director", director);
+            SetBool(overlay, "_visible", false);
 
             ControlPrompt prompt = go.AddComponent<ControlPrompt>();
             SetReference(prompt, "_run", run);
@@ -479,6 +483,28 @@ namespace Game.EditorTools
         /// Awake anyway, but wiring them explicitly means the scene is correct when you look at it in
         /// the Inspector rather than only once it is running.
         /// </summary>
+        /// <summary>
+        /// Sets a private serialized bool, for the same reason as <see cref="SetReference"/>: the scene
+        /// records the intent rather than depending on whatever the field default happens to be later.
+        /// </summary>
+        private static void SetBool(Object target, string field, bool value)
+        {
+            if (target == null) return;
+
+            var so = new SerializedObject(target);
+            SerializedProperty property = so.FindProperty(field);
+
+            if (property == null)
+            {
+                Debug.LogWarning(
+                    $"[PlayableSceneBuilder] {target.GetType().Name} has no serialized field '{field}'.");
+                return;
+            }
+
+            property.boolValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         private static void SetReference(Object target, string field, Object value)
         {
             if (target == null) return;

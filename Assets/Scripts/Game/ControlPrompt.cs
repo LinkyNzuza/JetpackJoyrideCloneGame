@@ -45,11 +45,30 @@ namespace Game.Run
         [Tooltip("Hide the control hint once the player has thrusted for the first time.")]
         [SerializeField] private bool _hideHintAfterFirstThrust = true;
 
+        // Tuning: a floor on how long the hint is up, which beats the first-thrust rule. Without it a
+        // player who taps immediately - which is most people, since falling prompts a reaction - erases
+        // the instruction before they have read it, and then has no idea that releasing is what drops
+        // them. Long enough to read two short lines, short enough not to sit over the first obstacles.
+        [Tooltip("Seconds the control hint stays visible no matter what, before the first-thrust rule " +
+                 "is allowed to hide it.")]
+        [SerializeField, Range(0f, 10f)] private float _minimumHintSeconds = 3.5f;
+
         [Tooltip("Seconds the control hint stays up if the player never thrusts. Zero keeps it forever.")]
         [SerializeField, Range(0f, 30f)] private float _hintTimeout = 0f;
 
         [SerializeField, Range(10, 48)] private int _primaryFontSize = 22;
         [SerializeField, Range(8, 36)] private int _secondaryFontSize = 15;
+
+        [Header("Panel")]
+        // The panel is measured from the text rather than given a fixed width. The label is device
+        // aware, so its length changes with what is plugged in - adding a gamepad turns it into "Hold
+        // SPACE or LEFT CLICK or A to fly up" - and any hardcoded width is a guess that one device
+        // combination will overflow. Measuring cannot be wrong.
+        [SerializeField, Range(8f, 60f)] private float _horizontalPadding = 26f;
+        [SerializeField, Range(4f, 40f)] private float _verticalPadding = 12f;
+
+        [Tooltip("Panels never narrower than this, so a short line still reads as deliberate.")]
+        [SerializeField, Range(120f, 600f)] private float _minimumPanelWidth = 300f;
 
         private GUIStyle _primary;
         private GUIStyle _secondary;
@@ -74,11 +93,20 @@ namespace Game.Run
         {
             get
             {
-                if (_hideHintAfterFirstThrust && _hasThrust) return false;
-                if (_hintTimeout > 0f && Time.unscaledTime - _shownSince > _hintTimeout) return false;
+                // Never over the death screen; the restart prompt owns that moment. Checked first so the
+                // minimum display time cannot force the hint on top of it.
+                if (_run != null && _run.State != RunManager.RunState.Playing) return false;
 
-                // Never over the death screen; the restart prompt owns that moment.
-                return _run == null || _run.State == RunManager.RunState.Playing;
+                float shown = Time.unscaledTime - _shownSince;
+
+                // The floor wins over the first-thrust rule. Everything below it is a reason to hide,
+                // and none of them apply until the player has had time to read.
+                if (shown < _minimumHintSeconds) return true;
+
+                if (_hideHintAfterFirstThrust && _hasThrust) return false;
+                if (_hintTimeout > 0f && shown > _hintTimeout) return false;
+
+                return true;
             }
         }
 
@@ -101,28 +129,49 @@ namespace Game.Run
         {
             // Low on the screen, so it sits under the play area rather than over the obstacles the
             // player is being asked to read.
-            float y = Screen.height * 0.74f;
-            DrawCentred($"Hold {ThrustLabel()} to fly up", _primary, y, 340f, 44f);
-            DrawCentred("Release to drop", _secondary, y + 30f, 340f, 0f);
+            DrawPanel($"Hold {ThrustLabel()} to fly up", "Release to drop", Screen.height * 0.72f);
         }
 
         private void DrawRestart()
         {
-            float y = Screen.height * 0.46f;
-            DrawCentred(RestartLabel(), _primary, y, 300f, 44f);
-            DrawCentred("Watch what hit you before you go again", _secondary, y + 30f, 380f, 0f);
+            DrawPanel(RestartLabel(), "Watch what hit you before you go again", Screen.height * 0.44f);
         }
 
-        private static void DrawCentred(string text, GUIStyle style, float y, float width, float boxHeight)
+        /// <summary>
+        /// Draws one panel containing both lines, sized to whichever is wider.
+        /// <para>
+        /// One panel rather than a box behind the first line and a floating second line. The two lines
+        /// are a single message, so they should sit in a single shape, and it means the backing covers
+        /// both - the parallax layers are pale, and unbacked light text on them is genuinely hard to
+        /// read.
+        /// </para>
+        /// </summary>
+        private void DrawPanel(string primaryText, string secondaryText, float topY)
         {
+            Vector2 primarySize = _primary.CalcSize(new GUIContent(primaryText));
+
+            bool hasSecondary = !string.IsNullOrEmpty(secondaryText);
+            Vector2 secondarySize = hasSecondary
+                ? _secondary.CalcSize(new GUIContent(secondaryText))
+                : Vector2.zero;
+
+            float lineGap = hasSecondary ? 6f : 0f;
+            float contentWidth = Mathf.Max(primarySize.x, secondarySize.x);
+            float width = Mathf.Max(_minimumPanelWidth, contentWidth + _horizontalPadding * 2f);
+            float height = _verticalPadding * 2f + primarySize.y + lineGap + secondarySize.y;
+
             float x = (Screen.width - width) * 0.5f;
+            GUI.Box(new Rect(x, topY, width, height), GUIContent.none);
 
-            // A backing panel only behind the primary line. The parallax layers are pale, so unbacked
-            // light text on them is genuinely hard to read.
-            if (boxHeight > 0f)
-                GUI.Box(new Rect(x, y - 8f, width, boxHeight), GUIContent.none);
+            // Labels span the full panel width and the styles are centre aligned, so each line centres
+            // itself within the shape regardless of how long it is.
+            float lineY = topY + _verticalPadding;
+            GUI.Label(new Rect(x, lineY, width, primarySize.y), primaryText, _primary);
 
-            GUI.Label(new Rect(x, y, width, 28f), text, style);
+            if (hasSecondary)
+                GUI.Label(
+                    new Rect(x, lineY + primarySize.y + lineGap, width, secondarySize.y),
+                    secondaryText, _secondary);
         }
 
         /// <summary>
