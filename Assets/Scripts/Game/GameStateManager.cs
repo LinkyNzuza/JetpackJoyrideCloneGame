@@ -17,6 +17,7 @@ using Game.Player;
 using Game.World;
 using Game.Progression;
 using Game.UI;
+using Game.Run;
 
 namespace Game.Core
 {
@@ -48,6 +49,14 @@ namespace Game.Core
                 "If false, the game skips straight into Playing on scene load — no Start screen needed.")]
         [SerializeField] private bool _useStartScreen = false;
 
+        [Header("Legacy Integration")]
+        [Tooltip("Ako's RunManager baseline handles death/retry on its own and will conflict with this " +
+                "class if both are active (duplicate freezes, duplicate retries, mismatched distance " +
+                "readings). If true, GameStateManager disables any RunManager found in the scene at " +
+                "startup — without editing RunManager.cs — so it becomes the single source of truth.")]
+        [SerializeField] private bool _takeOverFromRunManager = true;
+
+
         [Header("Retry")]
         [Tooltip("Mirrors Ako's RunManager lockout: seconds after death before a keypress/tap is accepted as a retry, so the input that killed the player can't instantly retry it.")]
         [SerializeField, Range(0f, 3f)] private float _retryLockout = 0.4f;
@@ -78,10 +87,46 @@ namespace Game.Core
 
             if (_player == null)
                 Debug.LogError("[GameStateManager] No PlayerController found. Game Over cannot trigger.", this);
+            if (_distanceTracker == null)
+                Debug.LogError("[GameStateManager] No DistanceTracker found/wired. Distance will never accumulate.", this);
+            if (_scoreManager == null)
+                Debug.LogWarning("[GameStateManager] No ScoreManager found/wired. Score/coins will not be tracked.", this);
+            if (_highScoreManager == null)
+                Debug.LogWarning("[GameStateManager] No HighScoreManager found/wired. High score will not update.", this);
+            if (_world == null)
+                Debug.LogWarning("[GameStateManager] No ObstacleDirector (World) found/wired. World won't freeze on death or clear on restart.", this);
+            if (_hud == null)
+                Debug.LogWarning("[GameStateManager] No HUDController found/wired. Live distance/score won't display.", this);
+            if (_gameOverUI == null)
+                Debug.LogError("[GameStateManager] No GameOverUIController found/wired. The Game Over panel will never appear.", this);
 
             if (!_useStartScreen && _startScreen != null)
                 _startScreen.Hide();
+            if (_takeOverFromRunManager)
+                TakeOverFromLegacyRunManager();
         }
+
+        /// Disables Ako's RunManager (if present) so it stops reacting to OnPlayerDeath and stops
+        /// handling its own retry input. This only flips the built-in Component.enabled flag —
+        /// it does not modify RunManager.cs. If RunManager hasn't run its own OnEnable yet, this
+        /// prevents it from ever subscribing in the first place; if it already has, disabling it
+        /// triggers RunManager's own OnDisable, which unsubscribes it cleanly.
+        /// </summary>
+        private void TakeOverFromLegacyRunManager()
+        {
+            RunManager legacyRunManager = FindFirstObjectByType<RunManager>();
+            if (legacyRunManager == null) return;
+
+            if (legacyRunManager.enabled)
+            {
+                legacyRunManager.enabled = false;
+                if (_logStateChanges)
+                    Debug.Log(
+                        "[GameStateManager] Found an active RunManager and disabled it — " +
+                        "GameStateManager is now the single source of truth for run state.", this);
+            }
+        }
+
 
         private void OnEnable()
         {
@@ -168,7 +213,18 @@ namespace Game.Core
 
         private void HandlePlayerDeath()
         {
-            if (State != GameState.Playing) return;
+            if (_logStateChanges)
+                Debug.Log($"[GameStateManager] OnPlayerDeath received. Current state: {State}.", this);
+
+            if (State != GameState.Playing)
+            {
+                if (_logStateChanges)
+                    Debug.LogWarning($"[GameStateManager] Death ignored because state was {State}, not Playing.", this);
+                return;
+            }
+
+
+            //if (State != GameState.Playing) return;
 
             // Order matters: stop measuring before freezing the final result, freeze the
             // result before evaluating the high score, evaluate before presenting the UI.

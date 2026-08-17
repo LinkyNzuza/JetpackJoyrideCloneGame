@@ -16,7 +16,8 @@ namespace Game.UI
     public sealed class GameOverUIController : MonoBehaviour
     {
         [Header("Wiring")]
-        [SerializeField] private GameStateManager _gameStateManager;
+        //[SerializeField] private GameStateManager _gameStateManager;
+        [SerializeField] private GameOverPresenter _presenter;
 
         [Header("Text Targets")]
         [SerializeField] private TMP_Text _finalDistanceText;
@@ -34,7 +35,8 @@ namespace Game.UI
 
         private void Awake()
         {
-            if (_gameStateManager == null) _gameStateManager = FindFirstObjectByType<GameStateManager>();
+            //if (_gameStateManager == null) _gameStateManager = FindFirstObjectByType<GameStateManager>();
+            if (_presenter == null) _presenter = FindFirstObjectByType<GameOverPresenter>();
             if (_canvasGroup == null) _canvasGroup = GetComponent<CanvasGroup>();
             if (_restartButton != null) _restartButton.onClick.AddListener(HandleRestartClicked);
 
@@ -78,7 +80,8 @@ namespace Game.UI
 
         private void HandleRestartClicked()
         {
-            if (_gameStateManager != null) _gameStateManager.RestartRun();
+            //if (_gameStateManager != null) _gameStateManager.RestartRun();
+            if (_presenter != null) _presenter.RequestRestart();
         }
     }
 }

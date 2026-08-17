@@ -6,6 +6,7 @@
 // so a UI/scoring decision can never contaminate the value the difficulty system relies on.
 using UnityEngine;
 using Game.Player;
+using Game.Run;
 
 namespace Game.Progression
 {
@@ -15,6 +16,7 @@ namespace Game.Progression
         [Header("Wiring")]
         [SerializeField] private DistanceTracker _distanceTracker;
         [SerializeField] private PlayerController _player;
+        [SerializeField] private RunManager _runManager;
 
         [Header("Diagnostics")]
         [Tooltip("Logs every coin event and the resulting coin tally, to help debug wiring issues.")]
@@ -27,6 +29,7 @@ namespace Game.Progression
         private int _coinScore;
         private bool _isFrozen;
         private int _frozenScore;
+        private RunManager.RunState _previousRunState;
 
         /// <summary>Coins collected so far this run, already multiplied.</summary>
         public int CoinScore => _coinScore;
@@ -45,11 +48,14 @@ namespace Game.Progression
         {
             if (_distanceTracker == null) _distanceTracker = FindFirstObjectByType<DistanceTracker>();
             if (_player == null) _player = FindFirstObjectByType<PlayerController>();
+            if (_runManager == null) _runManager = FindFirstObjectByType<RunManager>();
 
             if (_distanceTracker == null)
                 Debug.LogError("[ScoreManager] No DistanceTracker found. Score will read as coins only.", this);
             if (_player == null)
                 Debug.LogError("[ScoreManager] No PlayerController found or wired. Coins will NEVER be added to score.", this);
+            if (_runManager == null)
+                Debug.LogWarning("[ScoreManager] No RunManager found. Score will never reset between runs.", this);
         }
 
         private void OnEnable()
@@ -60,12 +66,39 @@ namespace Game.Progression
                 _player.OnCoinCollected += HandleCoinCollected;
                 if (_logCoinEvents)
                     Debug.Log($"[ScoreManager] Subscribed to OnCoinCollected on '{_player.name}'.", this);
+                _player.OnPlayerDeath += HandlePlayerDeath;
             }
         }
 
         private void OnDisable()
         {
-            if (_player != null) _player.OnCoinCollected -= HandleCoinCollected;
+            if (_player != null)
+            {
+                _player.OnCoinCollected -= HandleCoinCollected;
+                _player.OnPlayerDeath -= HandlePlayerDeath;
+            }
+            //if (_player != null) _player.OnCoinCollected -= HandleCoinCollected;
+        }
+
+        private void Start()
+        {
+            _previousRunState = _runManager != null ? _runManager.State : RunManager.RunState.Playing;
+        }
+
+        private void Update()
+        {
+            if (_runManager == null) return;
+
+            RunManager.RunState current = _runManager.State;
+            if (current == _previousRunState) return;
+
+            if (current == RunManager.RunState.Playing)
+            {
+                // Dead -> Playing: a retry just happened, however it was triggered.
+                ResetScore();
+            }
+
+            _previousRunState = current;
         }
 
         private void HandleCoinCollected(int coinValue)
@@ -85,6 +118,11 @@ namespace Game.Progression
 
             if (_logCoinEvents)
                 Debug.Log($"[ScoreManager] Coin collected (value {coinValue}). CoinScore is now {_coinScore}.", this);
+        }
+
+        private void HandlePlayerDeath()
+        {
+            FreezeFinalResult();
         }
 
         /// <summary>Called by the Game State Manager as step 3 of the reset sequence.</summary>
