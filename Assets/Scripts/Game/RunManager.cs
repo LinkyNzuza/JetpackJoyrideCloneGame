@@ -47,6 +47,12 @@ namespace Game.Run
         [Tooltip("Audio director, so a retry is audible. Optional; found automatically if left empty.")]
         [SerializeField] private PlayerAudioDirector _audio;
 
+        [Tooltip("Owner of the difficulty condition. Optional; found automatically if left empty.")]
+        [SerializeField] private RunConfig _config;
+
+        [Tooltip("Per-run data recorder. Optional; found automatically if left empty.")]
+        [SerializeField] private RunLog _log;
+
         [Header("Retry")]
         // Tuning: the player very often dies with thrust held, and they will be pressing things. Without
         // a short lockout the first stray input skips straight past the frozen world, which defeats the
@@ -58,7 +64,22 @@ namespace Game.Run
         [SerializeField] private bool _logStateChanges = true;
 
         private Action _onPlayerDeath;
+        private Action<int> _onCoinCollected;
         private float _deadSince;
+        private float _runStarted;
+
+        /// <summary>Coins picked up in the current run.</summary>
+        public int Coins { get; private set; }
+
+        /// <summary>
+        /// Sum of the values of those coins. Kept separate from the count because the tiers are worth
+        /// 1, 5 and 25, so eight coins can mean anything between eight and two hundred.
+        /// </summary>
+        public int CoinValue { get; private set; }
+
+        /// <summary>Seconds the current run has lasted, frozen once the player is dead.</summary>
+        public float RunDuration =>
+            State == RunState.Dead ? _deadSince - _runStarted : Time.unscaledTime - _runStarted;
 
         /// <summary>Current run state.</summary>
         public RunState State { get; private set; } = RunState.Playing;
@@ -75,6 +96,8 @@ namespace Game.Run
             if (_player == null) _player = FindFirstObjectByType<PlayerController>();
             if (_director == null) _director = FindFirstObjectByType<ObstacleDirector>();
             if (_audio == null) _audio = FindFirstObjectByType<PlayerAudioDirector>();
+            if (_config == null) _config = FindFirstObjectByType<RunConfig>();
+            if (_log == null) _log = FindFirstObjectByType<RunLog>();
 
             if (_player == null)
                 Debug.LogError("[RunManager] No PlayerController found. Retry cannot work.", this);
@@ -85,16 +108,46 @@ namespace Game.Run
                     "will neither freeze nor clear.", this);
 
             _onPlayerDeath = HandlePlayerDeath;
+            _onCoinCollected = HandleCoinCollected;
+        }
+
+        private void Start()
+        {
+            // Run one starts here rather than in Awake, so RunConfig has already resolved and applied
+            // its condition by the time the clock begins.
+            BeginRun();
         }
 
         private void OnEnable()
         {
-            if (_player != null) _player.OnPlayerDeath += _onPlayerDeath;
+            if (_player == null) return;
+
+            _player.OnPlayerDeath += _onPlayerDeath;
+            _player.OnCoinCollected += _onCoinCollected;
         }
 
         private void OnDisable()
         {
-            if (_player != null) _player.OnPlayerDeath -= _onPlayerDeath;
+            if (_player == null) return;
+
+            _player.OnPlayerDeath -= _onPlayerDeath;
+            _player.OnCoinCollected -= _onCoinCollected;
+        }
+
+        private void HandleCoinCollected(int value)
+        {
+            Coins++;
+            CoinValue += value;
+        }
+
+        // Counters and the clock, in one place so a run cannot start with half of the previous one's
+        // numbers still attached.
+        private void BeginRun()
+        {
+            Coins = 0;
+            CoinValue = 0;
+            _runStarted = Time.unscaledTime;
+            State = RunState.Playing;
         }
 
         private void Update()
@@ -116,14 +169,23 @@ namespace Game.Run
         /// </summary>
         public void Retry()
         {
+            // The condition is promoted first, before anything else is touched. SetProfile rebuilds the
+            // pace curve, so doing it here means the new run is laid out under the new condition from
+            // its first metre, and the run that just ended keeps the condition it was actually played
+            // under. This is the only moment at which changing the curve cannot corrupt a run.
+            if (_config != null) _config.ApplyPending();
+
             if (_player != null) _player.ResetRun();
             if (_director != null) _director.ResetRun();
             if (_audio != null) _audio.PlayRunStart();
 
-            State = RunState.Playing;
+            BeginRun();
 
             if (_logStateChanges)
-                Debug.Log($"[RunManager] Retry. Run {DeathCount + 1} starting.", this);
+            {
+                string profile = _config != null ? _config.Active.ToString() : "unknown condition";
+                Debug.Log($"[RunManager] Retry. Run {DeathCount + 1} starting under {profile}.", this);
+            }
         }
 
         private void HandlePlayerDeath()
@@ -140,10 +202,36 @@ namespace Game.Run
             // only way a player learns anything from dying.
             if (_director != null) _director.Freeze();
 
+            // Recorded before anything is reset. Every value here is read from the frozen world, so the
+            // row describes the run as it actually ended rather than as it was rebuilt.
+            RecordRun();
+
             if (_logStateChanges)
                 Debug.Log(
-                    $"[RunManager] Dead after {(_director != null ? _director.Distance : 0f):0} m. " +
+                    $"[RunManager] Dead after {(_director != null ? _director.Distance : 0f):0} m " +
+                    $"under {(_config != null ? _config.Active.ToString() : "unknown condition")}. " +
                     $"World frozen. Retry in {_retryLockout:0.00} s.", this);
+        }
+
+        private void RecordRun()
+        {
+            if (_log == null) return;
+
+            _log.Append(new RunLog.Record
+            {
+                RunIndex = DeathCount,
+                Profile = _config != null ? _config.Active : (_director != null ? _director.Profile : default),
+                DistanceMetres = _director != null ? _director.Distance : 0f,
+                DurationSeconds = RunDuration,
+                CoinsCollected = Coins,
+                CoinValueTotal = CoinValue,
+                TierReached = _director != null ? _director.TierIndex : 0,
+                ScrollSpeedAtDeath = _director != null ? _director.ScrollSpeed : 0f,
+                SpacingAtDeath = _director != null ? _director.CurrentSpacing : 0f,
+                LayoutsRejected = _director != null ? _director.RejectedForReachability : 0,
+                FallbacksUsed = _director != null ? _director.FallbacksUsed : 0,
+                GuaranteedPowerUps = _director != null ? _director.GuaranteedPowerUps : 0
+            });
         }
 
         /// <summary>
@@ -154,7 +242,19 @@ namespace Game.Run
         private static bool RetryRequested()
         {
             Keyboard keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.anyKey.wasPressedThisFrame) return true;
+            if (keyboard != null)
+            {
+                // The condition keys are excluded, because retry accepts any key and those three would
+                // otherwise both pick a condition and immediately consume it on the same press. Checked
+                // here rather than by asking RunConfig, so it cannot depend on which component's Update
+                // happens to run first.
+                if (keyboard.digit1Key.wasPressedThisFrame
+                    || keyboard.digit2Key.wasPressedThisFrame
+                    || keyboard.digit3Key.wasPressedThisFrame)
+                    return false;
+
+                if (keyboard.anyKey.wasPressedThisFrame) return true;
+            }
 
             Mouse mouse = Mouse.current;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame) return true;

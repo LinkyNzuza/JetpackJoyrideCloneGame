@@ -276,6 +276,34 @@ namespace Game.World
         /// <summary>Which difficulty configuration is running.</summary>
         public DifficultyProfile Profile => _profile;
 
+        /// <summary>How many times the generator fell back to its guaranteed-safe layout.</summary>
+        public int FallbacksUsed => _generator != null ? _generator.FallbacksUsed : 0;
+
+        /// <summary>How many power-ups came from the cadence guarantee rather than from a roll.</summary>
+        public int GuaranteedPowerUps => _generator != null ? _generator.GuaranteedPowerUps : 0;
+
+        /// <summary>
+        /// Switches the difficulty configuration and rebuilds the curve behind it.
+        /// <para>
+        /// This is the mechanism the three-condition comparison needs and the project did not have.
+        /// The profile was a serialized field with no setter, so changing condition meant opening the
+        /// scene, changing a dropdown and saving, which is easy to forget and leaves no record of what
+        /// was actually played.
+        /// </para>
+        /// <para>
+        /// Call this between runs, not during one. Rebuild re-reads every value rather than caching, so
+        /// it is safe at any time, but changing the pace curve halfway through a run would mean the run
+        /// was played under two conditions and its data would describe neither.
+        /// </para>
+        /// </summary>
+        public void SetProfile(DifficultyProfile profile)
+        {
+            if (_profile == profile) return;
+
+            _profile = profile;
+            Rebuild();
+        }
+
         private void Awake()
         {
             if (_player == null) _player = FindFirstObjectByType<PlayerController>();

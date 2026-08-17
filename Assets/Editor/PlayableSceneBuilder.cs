@@ -227,6 +227,9 @@ namespace Game.EditorTools
                 $"  player      {playerPrefab.name} at ({PlayerSpawnX}, {PlayerSpawnY}), X locked there\n" +
                 $"  world       {director.GetType().Name} profile {director.Profile}, {magnet.GetType().Name} wired\n" +
                 $"  run         {run.GetType().Name}, freeze on death and keypress to retry\n" +
+                "  condition   RunConfig, keys 1/2/3 pick Constant/Progressive/Aggressive\n" +
+                "  data        RunLog writes one CSV row per run to the persistent data path\n" +
+                "  overlay     RunTestOverlay shows the active condition; delete it for the real HUD\n" +
                 $"  background  {Layers.Length} parallax layers\n" +
                 "  NOT added to EditorBuildSettings, by design. Add it yourself when you want it built.");
         }
@@ -355,13 +358,31 @@ namespace Game.EditorTools
             return magnet;
         }
 
+        // Run state, condition selection, data recording and the test readout all live on one object.
+        // They are one concern - what is being measured and under which condition - and splitting them
+        // across the hierarchy would only make them easier to wire up wrongly.
         private static RunManager BuildRunManager(GameObject player, ObstacleDirector director)
         {
             var go = new GameObject("RunManager");
+
+            RunConfig config = go.AddComponent<RunConfig>();
+            SetReference(config, "_director", director);
+
+            RunLog log = go.AddComponent<RunLog>();
+
             RunManager run = go.AddComponent<RunManager>();
             SetReference(run, "_player", player.GetComponent<PlayerController>());
             SetReference(run, "_director", director);
             SetReference(run, "_audio", player.GetComponent<PlayerAudioDirector>());
+            SetReference(run, "_config", config);
+            SetReference(run, "_log", log);
+
+            RunTestOverlay overlay = go.AddComponent<RunTestOverlay>();
+            SetReference(overlay, "_run", run);
+            SetReference(overlay, "_config", config);
+            SetReference(overlay, "_log", log);
+            SetReference(overlay, "_director", director);
+
             return run;
         }
 
